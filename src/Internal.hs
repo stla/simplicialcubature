@@ -187,9 +187,9 @@ smpsms :: IOMatrix -> Int -> (UVectorD -> UVectorD) -> IO1dArray
        -> Double -> IO IO1dArray
 smpsms vertex nf f g scalar = do
   gAsList <- getElems g
-  f_gPermutations <- mapM ((fmap toList) . (fmap f) . (matprod vertex))
-                          (permuteMultiset gAsList)
-  newListArray (1,nf) (map ((*) scalar) (foldl1 (zipWith (+)) f_gPermutations))
+  f_gPermuts <- mapM ((fmap f).(matprod vertex)) (permuteMultiset gAsList)
+  newListArray (1,nf)
+               (toList (UV.map (*scalar) (foldl1 (UV.zipWith (+)) f_gPermuts)))
 
 extractColumn :: IOMatrix -> Int -> IO IO1dArray
 extractColumn m j = do
@@ -299,8 +299,8 @@ testsmprul = do
   rgnerrList <- getElems rgnerr
   return (basvalList, rgnerrList)
 
-rowMeans :: IOMatrix -> IO UVectorD
-rowMeans m = do
+rowSums :: IOMatrix -> IO UVectorD
+rowSums m = do
   (_, (nrow,ncol)) <- getBounds m
   rowSumsIO <- new nrow :: IO IOVectorD
   let step :: Int -> IO ()
@@ -316,8 +316,13 @@ rowMeans m = do
                              coef <- readArray m (i,j)
                              inner (j+1) (x + coef)
   step 1
-  rowSums <- freeze rowSumsIO
-  return $ UV.map (/(fromInt ncol)) rowSums
+  freeze rowSumsIO
+
+rowMeans :: IOMatrix -> IO UVectorD
+rowMeans m = do
+  (_, (_,ncol)) <- getBounds m
+  rowsums <- rowSums m
+  return $ UV.map (/(fromInt ncol)) rowsums
 
 testrowMeans :: IO UVectorD
 testrowMeans = do
@@ -340,7 +345,7 @@ smpdfs nd nf f top sbs vrts = do
   v <- mapIndices ((1,1),(nd,nd+1)) (\(i,j) -> (i,j,top)) vrts
   cn <- rowMeans v
   let fc = f cn
-      dfmd = sum $ toList $ UV.map abs fc
+      dfmd = UV.foldr (+) 0 (UV.map abs fc)
   frthdf <- newArray ((1,1),(nd,nd+1)) 0 :: IO IOMatrix
   iejeitjtisjsls <- new 7 :: IO IOVectorI
   write iejeitjtisjsls 4 1
@@ -361,7 +366,7 @@ smpdfs nd nf f top sbs vrts = do
                               vj <- array1dToUVectorD vjIO
                               let h = UV.map (*(2/(5*(fromInt nd +1))))
                                              (UV.zipWith (-) vi vj)
-                                  ewd = sum $ toList $ UV.map abs h
+                                  ewd = UV.foldr (+) 0 (UV.map abs h)
                                   twoh = UV.map (*2) h
                                   t1 = f (UV.zipWith (-) cn twoh)
                                   t2 = f (UV.zipWith (+) cn twoh)
@@ -370,7 +375,7 @@ smpdfs nd nf f top sbs vrts = do
                                   t5 = f (UV.zipWith (+) cn h)
                                   t6 = UV.map (*(-4)) (UV.zipWith (+) t4 t5)
                                   tsum = (foldl1 (UV.zipWith (+))) [t1,t2,t3,t6]
-                                  dfr1 = sum $ toList $ UV.map abs tsum
+                                  dfr1 = UV.foldr (+) 0 (UV.map abs tsum)
                                   dfr2 = if dfmd+dfr1/8 == dfmd then 0 else dfr1
                                   dfr3 = dfr2*ewd
                               dfmx <- UMV.read dfmxdfnx 0
@@ -536,3 +541,42 @@ replaceDimension m (j,k) v = do
                writeArray m (i,j,k) ((UV.!) v (i-1))
                loop (i+1)
   loop 1
+
+smpchc :: Int -> Int -> Int
+smpchc nd key =
+  if key == 0 || key == 3
+    then div ((nd+4)*(nd+3)*(nd+2)) 6 + (nd+2)*(nd+1)
+    else if key == 1
+      then 2*nd + 3
+      else if key == 2
+        then div ((nd+3)*(nd+2)) 2 + 2*(nd+1)
+        else div ((nd+5)*(nd+4)*(nd+3)*(nd+2)) 24 + 5*(div ((nd+2)*(nd+1)) 2)
+
+check :: Int -> Int -> Int -> Double -> Double -> Int -> Int -> Int
+check nd nf mxfs ea er sbs key =
+  if ea < 0 && er < 0
+    then 5
+    else if nf < 1
+      then 4
+      else if nd < 2
+        then 3
+        else if key < 0 || key > 4
+          then 2
+          else if mxfs < sbs*smpchc nd key
+            then 1
+            else 0
+
+adsimp :: Int -> Int -> Int -> (UVectorD -> UVectorD) -> Double -> Double
+       -> Int -> IO3dArray -> Bool -> IO (UVectorD, UVectorD, Int, Int)
+adsimp nd nf mxfs f ea er key vrts info = do
+  case key == 0 of
+    True -> adsimp nd nf mxfs f ea er 3 vrts info
+    False -> do
+      (_, (_,_,sbs)) <- getBounds vrts
+      let b = smpchc nd key
+      smpsad nd nf f mxfs ea er key b sbs vrts info
+
+smpsad :: Int -> Int -> (UVectorD -> UVectorD) -> Int -> Double -> Double -> Int
+       -> Int -> Int -> IO3dArray -> Bool -> IO (UVectorD, UVectorD, Int, Int)
+smpsad nd nf f mxfs ea er key b sbs vrts info = do
+  return (fromList [], fromList [], 0, 0)

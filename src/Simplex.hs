@@ -1,5 +1,5 @@
 module Simplex
- where
+  where
 import           Common
 import           Data.Array.IO      (thaw)
 import           Data.Array.Unboxed (UArray, array)
