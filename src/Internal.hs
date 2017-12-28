@@ -2,19 +2,21 @@ module Internal
    where
 -- import qualified Data.Array                  as A
 --import qualified Data.Array.IArray           as IA
+import           Common
 import           Data.Array.IArray           (Array)
 import           Data.Array.IO               (IOUArray, getBounds, getElems,
-                                              newArray, newArray_, newListArray,
-                                              readArray, writeArray, mapIndices)
+                                              mapIndices, newArray, newArray_,
+                                              newListArray, readArray,
+                                              writeArray)
 import qualified Data.Array.IO               as IOA
 --import qualified Data.Array.MArray           as MA
 --import qualified Data.Array.Unboxed          as AU
+import           Control.Monad               ((=<<))
 import           Data.Vector.Unboxed         (Vector, freeze, fromList, toList)
 import qualified Data.Vector.Unboxed         as UV
-import           Data.Vector.Unboxed.Mutable (IOVector, write, new)
+import           Data.Vector.Unboxed.Mutable (IOVector, new, write)
 import qualified Data.Vector.Unboxed.Mutable as UMV
 import           Math.Combinat.Permutations  (permuteMultiset)
-import Control.Monad ((=<<))
 
 type IOMatrix = IOUArray (Int,Int) Double
 type IO1dArray = IOUArray Int Double
@@ -327,7 +329,7 @@ array1dToUVectorD array = do
   (=<<) (return . fromList) (getElems array)
 
 smpdfs :: Int -> Int -> (UVectorD -> UVectorD) -> Int -> Int
-       -> IOUArray (Int,Int,Int) Double -> IO (Int, IOUArray (Int,Int,Int) Double)
+       -> IO3dArray -> IO (Int, IO3dArray)
 smpdfs nd nf f top sbs vrts = do
   let cuttf = 2.0
       cuttb = 8.0
@@ -427,7 +429,7 @@ smpdfs nd nf f top sbs vrts = do
                                 dfr2 <- readArray frthdf (lt,jt)
                                 let dfr = dfr1 + dfr2
                                 case dfr >= x of
-                                  True -> loop (l+1) dfr l
+                                  True  -> loop (l+1) dfr l
                                   False -> loop (l+1) x ls
                               False -> loop (l+1) x ls
           ls <- loop 1 0 0
@@ -447,7 +449,7 @@ smpdfs nd nf f top sbs vrts = do
               write iejeitjtisjsls 4 js
               write iejeitjtisjsls 5 it
             False -> return ()
-  vrts2 <- newArray_ ((1,1,1),(nd,nd+1,sbs+nregions-1)) :: IO (IOUArray (Int,Int,Int) Double)
+  vrts2 <- newArray_ ((1,1,1),(nd,nd+1,sbs+nregions-1)) :: IO IO3dArray
   let go1 :: Int -> IO ()
       go1 i | i == nd+1 = return ()
             | otherwise = do
@@ -525,7 +527,7 @@ smpdfs nd nf f top sbs vrts = do
           replaceDimension vrts2 (js,sbs+2) vtj
   return (nregions, vrts2)
 
-replaceDimension :: IOUArray (Int,Int,Int) Double -> (Int,Int) -> UVectorD -> IO ()
+replaceDimension :: IO3dArray -> (Int,Int) -> UVectorD -> IO ()
 replaceDimension m (j,k) v = do
   (_, (n,_,_)) <- getBounds m
   let loop :: Int -> IO ()
