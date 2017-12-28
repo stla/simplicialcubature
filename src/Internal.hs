@@ -10,17 +10,22 @@ import           Data.Array.IO               (IOUArray, getBounds, getElems,
                                               writeArray)
 import qualified Data.Array.IO               as IOA
 --import qualified Data.Array.MArray           as MA
---import qualified Data.Array.Unboxed          as AU
+import qualified Data.Array.Unboxed          as UA
+import Data.Array.Unboxed (UArray)
 import           Control.Monad               ((=<<))
 import           Data.Vector.Unboxed         (Vector, freeze, fromList, toList)
 import qualified Data.Vector.Unboxed         as UV
+import qualified Data.Vector as V
 import           Data.Vector.Unboxed.Mutable (IOVector, new, write)
 import qualified Data.Vector.Unboxed.Mutable as UMV
 import           Math.Combinat.Permutations  (permuteMultiset)
+import           Simplex (Simplex, simplexVolume)
+import           Data.Maybe (fromJust)
 
 type IOMatrix = IOUArray (Int,Int) Double
 type IO1dArray = IOUArray Int Double
 type Matrix = Array (Int,Int) Double
+type UMatrix = UArray (Int,Int) Double
 type IOVectorD = IOVector Double
 type IOVectorI = IOVector Int
 type UVectorD = Vector Double
@@ -163,6 +168,32 @@ smprms n key = do
       -- iw -> iw-5
       let sg = 1/(fromInt $ 23328*n6)
           u5 = -6^3 * sg * (fromInt $ 52212 - n*(6353 + n*(1934-n*27)))
+          u6 =  6^4 * sg * (fromInt $ 7884 - n*(1541 - n*9))
+          u7 = -6^5 * sg * (fromInt $ 8292 - n*(1139 - n*3))/(ndbl + 7)
+          p0 = -144 * (142528 + n*(23073 - n*115))
+          p1 = -12 * (6690556 + n*(2641189 + n*(245378 - n*1495)))
+          p2 = -16 * (6503401 + n*(4020794+n*(787281+n*(47323-n*385))))
+          p3 = -(6386660 + n*(4411997+n*(951821+n*(61659-n*665))))*(n + 7)
+          a = (fromInt p2)/(fromInt $ 3*p3)
+          p = a*((fromInt p1)/(fromInt p2) - a)
+          q = a*(2*a*a - (fromInt p1)/(fromInt p3)) + (fromInt p0)/(fromInt p3)
+          th = acos(-q/(2*(sqrt(-p*p*p))))/3
+          r = 2*sqrt(-p*p*p)**(1/3)
+          tp = 2*pi/3
+          a1 = -a + r*(cos(th))
+          a2 = -a + r*(cos(th+2*tp))
+          a3 = -a + r*(cos(th+tp))
+          npdbl = fromInt np
+          writeArray g (1,gms+5) ((1-ndbl*a1)/npdbl)
+          _ <- mapM (\i -> writeArray g (i,gms+5) ((1+a1)/npdbl)) [2..np]
+          write pts (gms+4) np
+          writeArray g (1,gms+6) ((1-ndbl*a2)/npdbl)
+          _ <- mapM (\i -> writeArray g (i,gms+6) ((1+a2)/npdbl)) [2..np]
+          write pts (gms+5) np
+          writeArray g (1,gms+7) ((1-ndbl*a3)/npdbl)
+          _ <- mapM (\i -> writeArray g (i,gms+7) ((1+a3)/npdbl)) [2..np]
+          write pts (gms+6) np
+
       return () -- XXX
     False -> return ()
   return (g, w, pts)
@@ -567,7 +598,7 @@ check nd nf mxfs ea er sbs key =
             else 0
 
 adsimp :: Int -> Int -> Int -> (UVectorD -> UVectorD) -> Double -> Double
-       -> Int -> IO3dArray -> Bool -> IO (UVectorD, UVectorD, Int, Int)
+       -> Int -> IO3dArray -> Bool -> IO (UVectorD, UVectorD, Int, Bool)
 adsimp nd nf mxfs f ea er key vrts info = do
   case key == 0 of
     True -> adsimp nd nf mxfs f ea er 3 vrts info
@@ -577,6 +608,93 @@ adsimp nd nf mxfs f ea er key vrts info = do
       smpsad nd nf f mxfs ea er key b sbs vrts info
 
 smpsad :: Int -> Int -> (UVectorD -> UVectorD) -> Int -> Double -> Double -> Int
-       -> Int -> Int -> IO3dArray -> Bool -> IO (UVectorD, UVectorD, Int, Int)
-smpsad nd nf f mxfs ea er key b sbs vrts info = do
-  return (fromList [], fromList [], 0, 0)
+       -> Int -> Int -> IO3dArray -> Bool -> IO (UVectorD, UVectorD, Int, Bool)
+smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
+  let dfcost = 1 + 2*nd*(nd+1)
+  -- vl <- newArray (1,nf) 0 :: IO IO1dArray
+  -- ae <- newArray (1,nf) 0 :: IO IO1dArray
+  (g, w, ptsIO) <- smprms nd key
+  pts <- freeze ptsIO
+  let fct = fromInt (product [1..nd])
+  -- vls <- newArray_ ((1,1),(nf,sbs)) :: IO IOMatrix
+  -- aes <- newArray_ ((1,1),(nf,sbs)) :: IO IOMatrix
+  simplices <- mapM (toSimplex vrts nd) [1..sbs]
+  let vol = map simplexVolume simplices
+      nv = sbs*rcls
+  matrices <- mapM
+              (\k -> mapIndices ((1,1),(nd,nd+1)) (\(i,j) -> (i,j,k)) vrts)
+              [1..sbs]
+  (rgnerrs, basvals) <- (=<<) (return.unzip)
+                        (mapM (\k ->
+                                smprul (matrices!!k) nf f (vol!!(k-1)) g w pts)
+                        [1..sbs])
+  -- aes <- matrixFromColumns rgnerrs
+  -- vls <- matrixFromColumns basvals
+  rgnerrs' <- mapM array1dToUVectorD rgnerrs
+  basvals' <- mapM array1dToUVectorD basvals
+  let vl = foldl1 (UV.zipWith (+)) basvals'
+      ae = foldl1 (UV.zipWith (+)) rgnerrs'
+      aes = V.fromListN sbs rgnerrs'
+      vls = V.fromListN sbs basvals'
+  let fl = UV.any (> (max ea (UV.maximum (UV.map ((*er).abs) vl)))) ae
+  let loop :: Params -> IO (UVectorD, UVectorD, Int, Bool)
+      loop params | not fl || (nv+dfcost+4*rcls > mxfs) = return (vl, ae, nv, fl)
+                  | otherwise = do
+                    let maxs = V.map (UV.maximum) aes
+                        id = fromJust $ V.findIndex (== maximum maxs) maxs
+                        vl0 = UV.zipWith (-) vl (vls V.! id)
+                        ae0 = UV.zipWith (-) ae (aes V.! id)
+                    (nregions, vrts2) <- smpdfs nd nf f id sbs vrts
+                    let vi = (vol!!id)/(fromInt nregions)
+                        nv2 = nv + (nregions-1)*rcls
+                        sbs2 = sbs + (nregions-1)
+                    matrices <- mapM
+                                (\k -> mapIndices ((1,1),(nd,nd+1)) (\(i,j) -> (i,j,k)) vrts2)
+                                [(sbs+1)..(sbs+nregions-1)]
+                    (rgnerrs, basvals) <- (=<<) (return.unzip)
+                                          (mapM (\m ->
+                                                  smprul m nf f vi g w pts)
+                                          matrices)
+                    rgnerrs' <- mapM array1dToUVectorD rgnerrs
+                    basvals' <- mapM array1dToUVectorD basvals
+                    let vl2 = UV.zipWith (+) vl0 (foldl1 (UV.zipWith (+)) basvals')
+                        ae2 = UV.zipWith (+) ae0 (foldl1 (UV.zipWith (+)) rgnerrs')
+                        aes2 = V.fromListN (nregions-1) rgnerrs'
+                        vls2 = V.fromListN (nregions-1) basvals'
+                        fl2 = UV.any (> (max ea (UV.maximum (UV.map ((*er).abs) vl2)))) ae
+                    loop (fl2, nv2, sbs2, aes2, vls2, ae2, vl2, vrts2)
+                  where
+                    (fl, nv, sbs, aes, vls, ae, vl, vrts) = params
+  -- dans le code R il fair rowSums mais ça me semble inutile
+  loop (fl, nv, sbs, aes, vls, ae, vl, vrts)
+
+
+--  return (fromList [], fromList [], 0, 0)
+--   where
+--     untilFun :: TTT -> TTT
+--     untilFun ttt = do
+--       (fl, nv, aes, vls, ae, vl) <- ttt
+-- type TTT = IO (Bool, Int, V.Vector UVectorD, V.Vector UVectorD, UVectorD, UVectorD)
+type Params =
+  (Bool, Int, Int, V.Vector UVectorD, V.Vector UVectorD, UVectorD, UVectorD, IO3dArray)
+
+matrixFromColumns :: [IO1dArray] -> IO UMatrix
+matrixFromColumns columns = do
+  (_,nrow) <- getBounds (head columns)
+  let ncol = length columns
+  u1darrays <- mapM IOA.freeze columns :: IO [UArray Int Double]
+  let assocs = map UA.assocs u1darrays
+  let assocs' = map (\k -> map (\(i,e) -> ((k,i),e)) (assocs !! (k-1))) [1..ncol]
+  return $ UA.array ((1,1),(nrow,ncol)) (concat assocs')
+
+
+
+
+
+toSimplex :: IO3dArray -> Int -> Int -> IO Simplex
+toSimplex m n k = do
+  (_, (nrow,_,_)) <- getBounds m
+  let getColumn :: Int -> IO IO1dArray
+      getColumn col = mapIndices (1,nrow) (\i -> (i,col,k)) m
+  columns <- mapM getColumn [1..n]
+  mapM getElems columns
