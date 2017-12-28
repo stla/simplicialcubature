@@ -21,7 +21,6 @@ import qualified Data.Vector.Unboxed.Mutable as UMV
 import           Math.Combinat.Permutations  (permuteMultiset)
 import           Simplex                     (Simplex, simplexVolume)
 import           Data.Maybe                  (fromJust)
-import           Data.Matrix                 (fromLists)
 
 type IOMatrix = IOUArray (Int,Int) Double
 type IO1dArray = IOUArray Int Double
@@ -35,7 +34,7 @@ type UVectorI = Vector Int
 fromInt :: Int -> Double
 fromInt = fromIntegral
 
-smprms :: Int -> Int -> IO (IOMatrix, IOMatrix, IOVectorI, [UVectorD])
+smprms :: Int -> Int -> IO (IOMatrix, [UVectorD], IOVectorI)
 smprms n key = do
   let (rls, gms, wts) | key == 1 = (3, 2, 3) :: (Int, Int, Int)
                       | key == 2 = (5, 4, 6) :: (Int, Int, Int)
@@ -217,7 +216,8 @@ smprms n key = do
     False -> return ()
   rowsIO <- mapM (extractRow w) [2..wts]
   rows <- mapM array1dToUVectorD rowsIO
-  let cols = map (\j -> fromList $ map (\i -> rows!!(i-2) UV.!(j-1)) [2..wts]) [1..rls]
+  --let cols = map (\j -> fromList $ map (\i -> rows!!(i-2) UV.!(j-1)) [2..wts]) [1..rls]
+  let cols = transpose rows
   ptsU <- (=<<) (return.(UV.map fromInt)) (UV.freeze pts)
   let row1 = map (\j -> 1 - UV.foldr (+) 0 (UV.zipWith (*) (UV.tail ptsU) (cols!!(j-1)))) [1..rls]
 --  let wmat = fromLists (row1 : (map toList rows))
@@ -234,24 +234,19 @@ smprms n key = do
                         ptsW = UV.map (/nb) (UV.zipWith (*) ptsU (cols!!(k-1)))
                         slice = [cols!!j | j <- [1..(k-2)]]
                         prod1 = fromList $ map ((UV.foldr (+) 0).(UV.zipWith (*) ptsW)) slice
-                        rows = map (\i -> fromList $ map (\j -> slice!!(j-1) UV.!(i-1)) [1..(k-2)]) [1..wts]
+                        --rows = map (\i -> fromList $ map (\j -> slice!!(j-1) UV.!(i-1)) [1..(k-2)]) [1..wts]
+                        rows = transpose slice
                         prod2 = fromList $ map ((UV.foldr (+) 0).(UV.zipWith (*) prod1)) rows
                         wk = UV.zipWith (-) (cols!!(k-1)) prod2
                         ratio = nb / (UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) wk)))
                         wknew = UV.map (*(sqrt ratio)) wk
       wcolsnew = foldl updateW wcols3 [3..rls]
-  -- W[1, ] <- 1 - PTS[2:WTS] %*% W[2:WTS, ]
-  -- NB <- sum(PTS * (W[ ,1]^2));
-  -- W[ ,2:RLS] <- W[ ,2:RLS] - W[ ,1,drop=FALSE] %*% matrix(1.0,nrow=1,ncol=RLS-1);
-  -- #        Orthogonalize and normalize null rules.
-  -- W[ ,2] = W[ ,2]*sqrt( NB/sum(PTS*W[ ,2]^2) )
-  -- for (K in 3 : RLS ) {
-  --   W[ ,K] = W[ ,K] - W[ ,2:(K-1),drop=FALSE] %*% t(W[ ,2:(K-1),drop=FALSE]) %*% ( PTS*W[ ,K] )/NB
-  --   W[ ,K] = W[ ,K]*sqrt( NB/sum(PTS*W[ ,K]^2) )
-  -- }
+  return (g, transpose wcolsnew, pts)
 
-  return (g, w, pts, wcolsnew)
-
+transpose :: [UVectorD] -> [UVectorD] -- à utiliser 2 fois avant
+transpose cols =
+  map (\i -> fromList $ map (\j -> cols!!j UV.!i)
+      [0..(length cols - 1)]) [0..(UV.length (head cols) - 1)]
 
 
 matprod :: IOMatrix -> [Double] -> IO UVectorD
@@ -309,6 +304,20 @@ testouterProduct = do
   x2 <- newListArray (1,3) [1, 2, 3] :: IO IO1dArray
   (>>=) (outerProduct x1 x2) IOA.freeze
 
+outerProduct2 :: IO1dArray -> UVectorD -> IO IOMatrix
+outerProduct2 x1 x2 = do
+  (_, n1) <- getBounds x1
+  let n2 = UV.length x2
+  out <- newArray_ ((1,1),(n1,n2)) :: IO IOMatrix
+  let step :: Int -> Int -> IO IOMatrix
+      step i j | i == n1 && j == n2+1 = return out
+               | j == n2+1 = step (i+1) 1
+               | otherwise = do
+                  x1_i <- readArray x1 i
+                  writeArray out (i,j) (x1_i * (x2 UV.! (j-1)))
+                  step i (j+1)
+  step 1 1
+
 sumMatrices :: [IOMatrix] -> IO IOMatrix
 sumMatrices matrices = do
   (_, (n1,n2)) <- getBounds (head matrices)
@@ -323,18 +332,19 @@ sumMatrices matrices = do
   step 1 1
 
 smprul :: IOMatrix -> Int -> (UVectorD -> UVectorD) -> Double -> IOMatrix
-       -> IOMatrix -> UVectorI -> IO (IO1dArray, IO1dArray)
+       -> [UVectorD] -> UVectorI -> IO (IO1dArray, IO1dArray)
 smprul vrts nf f vol g w pts = do
   let rtmn = 0.1
       small = 1e-12
       errcof = 8
-  (_, (_,rls)) <- getBounds w
-  let ptsPositive = toList $ UV.map (+1) $ UV.findIndices (> 0) pts
+  --(_, (_,rls)) <- getBounds w
+      rls = UV.length (head w)
+      ptsPositive = toList $ UV.map (+1) $ UV.findIndices (> 0) pts
   toSum <- mapM (\k -> do
                          g_colk <- extractColumn g k
-                         w_rowk <- extractRow w k
+--                         w_rowk <- extractRow w k
                          sms <- smpsms vrts nf f g_colk vol
-                         outerProduct sms w_rowk)
+                         outerProduct2 sms (w!!(k-1)))
                 ptsPositive
   rule <- sumMatrices toSum -- quid si la liste est vide ?
   basval <- extractColumn rule 1
@@ -375,7 +385,7 @@ testsmprul = do
       f v = let list = toList v in fromList [sum list, product list]
   let vol = 2.0
   g <- newListArray ((1,1),(nd+1,3)) [1,2,3,4,5,6,7,8,9,10,11,12] :: IO IOMatrix
-  w <- newListArray ((1,1),(3,3)) [1,2,3,4,5,6,7,8,9] :: IO IOMatrix
+  let w = [fromList [1,2,3], fromList [4,5,6], fromList [7,8,9]] :: [UVectorD]
   let pts = fromList [1,2,3] :: UVectorI
   -- gcol <- extractColumn g 1
   -- sms <- smpsms vrts nf f gcol 1
@@ -669,7 +679,7 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
   let dfcost = 1 + 2*nd*(nd+1)
   -- vl <- newArray (1,nf) 0 :: IO IO1dArray
   -- ae <- newArray (1,nf) 0 :: IO IO1dArray
-  (g, w, ptsIO, _) <- smprms nd key
+  (g, w, ptsIO) <- smprms nd key
   pts <- freeze ptsIO
   let fct = fromInt (product [1..nd])
   -- vls <- newArray_ ((1,1),(nf,sbs)) :: IO IOMatrix
