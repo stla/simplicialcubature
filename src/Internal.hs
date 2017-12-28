@@ -413,8 +413,19 @@ smpdfs nd nf f top sbs vrts = do
   case nregions == 4 of
     True -> do
       let vt = UV.map (/2) (UV.zipWith (+) vti vtj)
-      return ()
+      replaceDimension vrts2 (js,top) vt
+      replaceDimension vrts2 (is,sbs+1) vti
     False -> do
       let vt = UV.map (/3) (UV.zipWith (+) (UV.map (*2) vti) vtj)
       return ()
-  return (0, vrts)
+  return (nregions, vrts2)
+
+replaceDimension :: IOUArray (Int,Int,Int) Double -> (Int,Int) -> UVectorD -> IO ()
+replaceDimension m (j,k) v = do
+  (_, (n,_,_)) <- getBounds m
+  let loop :: Int -> IO ()
+      loop i | i == n+1 = return ()
+             | otherwise = do
+               writeArray m (i,j,k) ((UV.!) v (i-1))
+               loop (i+1)
+  loop 1
