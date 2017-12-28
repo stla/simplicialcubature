@@ -24,6 +24,9 @@ type IOVectorI = IOVector Int
 type UVectorD = Vector Double
 type UVectorI = Vector Int
 
+fromInt :: Int -> Double
+fromInt = fromIntegral
+
 smprms :: Int -> Int -> IO (IOMatrix, IOMatrix, IOVectorI)
 smprms n key = do
   let (rls, gms, wts) | key == 1 = (3, 2, 3) :: (Int, Int, Int)
@@ -39,11 +42,11 @@ smprms n key = do
       n4 = n2 * (n+3) * (n+4)
       n6 = n4 * (n+5) * (n+6)
       n8 = n6 * (n+7) * (n+8)
-      ndouble = fromIntegral n :: Double
-      r1 = (ndouble + 4 - sqrt(15)) / (ndouble*ndouble + 8*ndouble + 1)
-      s1 = 1 - ndouble*r1
+      ndbl = fromInt n
+      r1 = (ndbl + 4 - sqrt(15)) / (ndbl*ndbl + 8*ndbl + 1)
+      s1 = 1 - ndbl*r1
       l1 = s1 - r1
-  _ <- mapM (\j -> writeArray g (j,1) (1/(ndouble+1))) [1 .. np]
+  _ <- mapM (\j -> writeArray g (j,1) (1/(ndbl+1))) [1 .. np]
   write pts 0 1
   writeArray g (1,gms+1) s1
   _ <- mapM (\j -> writeArray g (j,gms+1) r1) [2 .. np]
@@ -51,14 +54,14 @@ smprms n key = do
   case key < 4 of
     True -> do
       writeArray w (1,rls) 1
-      writeArray w (gms+1,rls-1) (1/(ndouble+1))
+      writeArray w (gms+1,rls-1) (1/(ndbl+1))
     False -> return ()
   let iw = if key < 4 then rls-2 else rls
-  writeArray g (1,2) (3/(ndouble+3))
-  _ <- mapM (\j -> writeArray g (j,2) (1/(ndouble+3))) [2 .. np]
+  writeArray g (1,2) (3/(ndbl+3))
+  _ <- mapM (\j -> writeArray g (j,2) (1/(ndbl+3))) [2 .. np]
   write pts 1 np
-  let n2double = fromIntegral n2 :: Double
-  writeArray w (2,iw) ((ndouble+3)^3 / (4*n2double*(ndouble+3)))
+  let n2double = fromInt n2 :: Double
+  writeArray w (2,iw) ((ndbl+3)^3 / (4*n2double*(ndbl+3)))
   case key > 1 of
     True -> do
       case n == 2 of
@@ -76,32 +79,90 @@ smprms n key = do
           write pts (gms+1) 3
           writeArray w (gms+2,iw-1) (1/6)
         False -> do
-          let r2 = (ndouble+4+sqrt(15)) / (ndouble*ndouble+8*ndouble+1)
-              s2 = 1 - ndouble*r2
+          let r2 = (ndbl+4+sqrt(15)) / (ndbl*ndbl+8*ndbl+1)
+              s2 = 1 - ndbl*r2
               l2 = s2 - r2
           writeArray g (1,gms+2) s2
           _ <- mapM (\j -> writeArray g (j,gms+2) r2) [2 .. np]
           write pts (gms+1) np
-          writeArray w (gms+2,iw-1) ((2/(ndouble+3)-l1)/(n2double*(l2-l1)*l2*l2))
-          writeArray w (gms+1,iw-1) ((2/(ndouble+3)-l2)/(n2double*(l1-l2)*l1*l1))
-      writeArray g (1,3) (5/(ndouble+5))
-      _ <- mapM (\j -> writeArray g (j,3) (1/(ndouble+5))) [2 .. np]
+          writeArray w (gms+2,iw-1) ((2/(ndbl+3)-l1)/(n2double*(l2-l1)*l2*l2))
+          writeArray w (gms+1,iw-1) ((2/(ndbl+3)-l2)/(n2double*(l1-l2)*l1*l1))
+      writeArray g (1,3) (5/(ndbl+5))
+      _ <- mapM (\j -> writeArray g (j,3) (1/(ndbl+5))) [2 .. np]
       write pts 2 np
-      writeArray g (1,4) (3/(ndouble+5))
-      writeArray g (2,4) (3/(ndouble+5))
-      _ <- mapM (\j -> writeArray g (j,4) (1/(ndouble+5))) [3 .. np]
+      writeArray g (1,4) (3/(ndbl+5))
+      writeArray g (2,4) (3/(ndbl+5))
+      _ <- mapM (\j -> writeArray g (j,4) (1/(ndbl+5))) [3 .. np]
       write pts 3 (div (n*np) 2)
-      let n4double = fromIntegral n4 :: Double
-      writeArray w (2,iw-2) (-(ndouble+3)^5 / (16*n4double))
-      writeArray w (3,iw-2) ((ndouble+5)^5 / (16*n4double*(ndouble+5)))
-      writeArray w (4,iw-2) ((ndouble+5)^5 / (16*n4double*(ndouble+5)))
+      let n4double = fromInt n4 :: Double
+      writeArray w (2,iw-2) (-(ndbl+3)^5 / (16*n4double))
+      writeArray w (3,iw-2) ((ndbl+5)^5 / (16*n4double*(ndbl+5)))
+      writeArray w (4,iw-2) ((ndbl+5)^5 / (16*n4double*(ndbl+5)))
     False -> return ()
   case key > 2 of
     True -> do
-      let u1 = (ndouble+7+2*sqrt(15)) / (ndouble^2+14*ndouble-11)
-          v1 = u1 --- XXX
+      let u1 = (ndbl+7+2*sqrt(15)) / (ndbl^2+14*ndbl-11)
+          v1 = (1-(ndbl-1)*u1)/2
           d1 = v1 - u1
       writeArray g (1,gms+3) v1
+      writeArray g (2,gms+3) v1
+      _ <- mapM (\j -> writeArray g (j,gms+3) u1) [3 .. np]
+      write pts (gms+2) (div (n*np) 2)
+      let u2 = (ndbl+7-2*sqrt(15)) / (ndbl^2+14*ndbl-11)
+          v2 = (1-(ndbl-1)*u2)/2
+          d2 = v2 - u2
+      writeArray g (1,gms+4) v2
+      writeArray g (2,gms+4) v2
+      _ <- mapM (\j -> writeArray g (j,gms+4) u2) [3 .. np]
+      write pts (gms+3) (div (n*np) 2)
+      case n == 2 of
+        True -> do
+          writeArray w (gms+3,iw-3) ((155-sqrt(15))/1200)
+          writeArray w (gms+4,iw-3) ((155+sqrt(15))/1200)
+          writeArray w (1,iw-3) (1 - 31/40)
+        False -> do
+          case n == 3 of
+            True -> do
+              writeArray w (gms+1,iw-3) ((2665+14*sqrt(15))/37800)
+              writeArray w (gms+2,iw-3) ((2665-14*sqrt(15))/37800)
+              writeArray w (gms+3,iw-3) (2*15/567)
+              write pts (gms+3) 0
+            False -> do
+              let r2 = (ndbl+4+sqrt(15)) / (ndbl*ndbl+8*ndbl+1)
+                  l2 = 1 - (ndbl+1)*r2
+                  den = l1^4*(l1-l2)*(fromInt n4)
+              writeArray w (gms+1,iw-3)
+                           ((2*(27-ndbl)/(ndbl+5)-l2*(13-ndbl))/den)
+              writeArray w (gms+2,iw-3)
+                           ((2*(27-ndbl)/(ndbl+5)-l1*(13-ndbl))/den)
+              writeArray w (gms+3,iw-3)
+                           ((2/(ndbl+5)-d2)/((fromInt n4)*(d1-d2)*d1^4))
+              writeArray w (gms+4,iw-3)
+                           ((2/(ndbl+5)-d1)/((fromInt n4)*(d2-d1)*d2^4))
+      writeArray g (1,5) (7/(ndbl+7))
+      _ <- mapM (\i -> writeArray g (i,5) (1/(ndbl+7))) [2 .. np]
+      write pts 4 np
+      writeArray g (1,6) (5/(ndbl+7))
+      writeArray g (2,6) (3/(ndbl+7))
+      _ <- mapM (\i -> writeArray g (i,6) (1/(ndbl+7))) [3 .. np]
+      write pts 5 (np*n)
+      _ <- mapM (\i -> writeArray g (i,7) (3/(ndbl+7))) [1,2,3]
+      write pts 6 (div ((n-1)*n*np) 6)
+      writeArray w (2,iw-4) ((ndbl+3)^7/(fromInt $ 128*n4*(n+5)))
+      _ <- mapM
+           (\i -> writeArray w (i,iw-4) ((-(ndbl+5)^7)/(fromInt $ 64*n6))) [3,4]
+      _ <- mapM
+           (\i -> writeArray w (i,iw-4) (((ndbl+7)^7)/(fromInt $ 64*n6*(n+7))))
+           [5,6,7]
+      return ()
+    False -> return ()
+  case key == 4 of
+    True -> do
+      -- iw -> iw-5
+      let sg = 1/(fromInt $ 23328*n6)
+          u5 = -6^3 * sg * (fromInt $ 52212 - n*(6353 + n*(1934-n*27)))
+      return () -- XXX
+    False -> return ()
   return (g, w, pts)
 
 matprod :: IOMatrix -> [Double] -> IO UVectorD
@@ -254,7 +315,7 @@ rowMeans m = do
                              inner (j+1) (x + coef)
   step 1
   rowSums <- freeze rowSumsIO
-  return $ UV.map (/(fromIntegral ncol)) rowSums
+  return $ UV.map (/(fromInt ncol)) rowSums
 
 testrowMeans :: IO UVectorD
 testrowMeans = do
@@ -279,9 +340,9 @@ smpdfs nd nf f top sbs vrts = do
   let fc = f cn
       dfmd = sum $ toList $ UV.map abs fc
   frthdf <- newArray ((1,1),(nd,nd+1)) 0 :: IO IOMatrix
-  iejeitjtisjs <- new 6 :: IO IOVectorI
-  write iejeitjtisjs 4 1
-  write iejeitjtisjs 5 2
+  iejeitjtisjsls <- new 7 :: IO IOVectorI
+  write iejeitjtisjsls 4 1
+  write iejeitjtisjsls 5 2
   dfmxdfnx <- UMV.replicate 2 0 :: IO IOVectorD
   let step :: Int -> Double -> IO ()
       step i x | i == nd+1 = return ()
@@ -296,7 +357,7 @@ smpdfs nd nf f top sbs vrts = do
                               vjIO <- extractColumn v j
                               vi <- array1dToUVectorD viIO
                               vj <- array1dToUVectorD vjIO
-                              let h = UV.map (*(2/(5*(fromIntegral nd +1))))
+                              let h = UV.map (*(2/(5*(fromInt nd +1))))
                                              (UV.zipWith (-) vi vj)
                                   ewd = sum $ toList $ UV.map abs h
                                   twoh = UV.map (*2) h
@@ -313,27 +374,27 @@ smpdfs nd nf f top sbs vrts = do
                               dfmx <- UMV.read dfmxdfnx 0
                               case dfr3 >= dfmx of
                                 True -> do
-                                  is <- UMV.read iejeitjtisjs 4
-                                  js <- UMV.read iejeitjtisjs 5
-                                  write iejeitjtisjs 2 is
-                                  write iejeitjtisjs 3 js
-                                  write iejeitjtisjs 4 i
-                                  write iejeitjtisjs 5 j
+                                  is <- UMV.read iejeitjtisjsls 4
+                                  js <- UMV.read iejeitjtisjsls 5
+                                  write iejeitjtisjsls 2 is
+                                  write iejeitjtisjsls 3 js
+                                  write iejeitjtisjsls 4 i
+                                  write iejeitjtisjsls 5 j
                                   write dfmxdfnx 1 dfmx
                                   write dfmxdfnx 0 dfr3
                                 False -> do
                                   dfnx <- UMV.read dfmxdfnx 1
                                   case dfr3 >= dfnx of
                                     True -> do
-                                      write iejeitjtisjs 2 i
-                                      write iejeitjtisjs 3 j
+                                      write iejeitjtisjsls 2 i
+                                      write iejeitjtisjsls 3 j
                                       write dfmxdfnx 1 dfr3
                                     False -> return ()
                               writeArray frthdf (i,j) dfr3
                               case ewd >= y of
                                 True -> do
-                                  write iejeitjtisjs 0 i
-                                  write iejeitjtisjs 1 j
+                                  write iejeitjtisjsls 0 i
+                                  write iejeitjtisjsls 1 j
                                   inner (j+1) ewd
                                 False -> inner (j+1) y
   step 1 0
@@ -345,22 +406,22 @@ smpdfs nd nf f top sbs vrts = do
     False -> do
       case dfmx == 0 of
         True -> do
-          ie <- UMV.read iejeitjtisjs 0
-          je <- UMV.read iejeitjtisjs 1
-          write iejeitjtisjs 4 ie
-          write iejeitjtisjs 5 je
+          ie <- UMV.read iejeitjtisjsls 0
+          je <- UMV.read iejeitjtisjsls 1
+          write iejeitjtisjsls 4 ie
+          write iejeitjtisjsls 5 je
         False -> do
           let loop :: Int -> Double -> Int -> IO Int
               loop l x ls | l == nd+2 = return ls
                           | otherwise = do
-                            is <- UMV.read iejeitjtisjs 4
-                            js <- UMV.read iejeitjtisjs 5
+                            is <- UMV.read iejeitjtisjsls 4
+                            js <- UMV.read iejeitjtisjsls 5
                             case (l /= is) && (l /= js) of
                               True -> do
                                 let it = minimum [l,is,js]
                                     jt = maximum [l,is,js]
-                                write iejeitjtisjs 2 it
-                                write iejeitjtisjs 3 jt
+                                write iejeitjtisjsls 2 it
+                                write iejeitjtisjsls 3 jt
                                 let lt = is+js+l-it-jt
                                 dfr1 <- readArray frthdf (it,lt)
                                 dfr2 <- readArray frthdf (lt,jt)
@@ -370,20 +431,21 @@ smpdfs nd nf f top sbs vrts = do
                                   False -> loop (l+1) x ls
                               False -> loop (l+1) x ls
           ls <- loop 1 0 0
-          is <- UMV.read iejeitjtisjs 4
-          js <- UMV.read iejeitjtisjs 5
+          write iejeitjtisjsls 6 ls
+          is <- UMV.read iejeitjtisjsls 4
+          js <- UMV.read iejeitjtisjsls 5
           difil <- readArray frthdf (min is ls, max is ls)
           diflj <- readArray frthdf (min js ls, max js ls)
           let dfnx = max difil diflj
           write dfmxdfnx 1 dfnx
           case dfmx/cuttb < dfnx && difil > diflj of
             True -> do
-              is <- UMV.read iejeitjtisjs 4
-              js <- UMV.read iejeitjtisjs 5
-              it <- UMV.read iejeitjtisjs 2
-              write iejeitjtisjs 2 is
-              write iejeitjtisjs 4 js
-              write iejeitjtisjs 5 it
+              is <- UMV.read iejeitjtisjsls 4
+              js <- UMV.read iejeitjtisjsls 5
+              it <- UMV.read iejeitjtisjsls 2
+              write iejeitjtisjsls 2 is
+              write iejeitjtisjsls 4 js
+              write iejeitjtisjsls 5 it
             False -> return ()
   vrts2 <- newArray_ ((1,1,1),(nd,nd+1,sbs+nregions-1)) :: IO (IOUArray (Int,Int,Int) Double)
   let go1 :: Int -> IO ()
@@ -404,8 +466,8 @@ smpdfs nd nf f top sbs vrts = do
                           go3 1
               go2 1
   go1 1
-  is <- UMV.read iejeitjtisjs 4
-  js <- UMV.read iejeitjtisjs 5
+  is <- UMV.read iejeitjtisjsls 4
+  js <- UMV.read iejeitjtisjsls 5
   vtiIO <- extractColumn v is
   vtjIO <- extractColumn v js
   vti <- array1dToUVectorD vtiIO
@@ -415,9 +477,52 @@ smpdfs nd nf f top sbs vrts = do
       let vt = UV.map (/2) (UV.zipWith (+) vti vtj)
       replaceDimension vrts2 (js,top) vt
       replaceDimension vrts2 (is,sbs+1) vti
+      replaceDimension vrts2 (js,sbs+1) vt
+      replaceDimension vrts2 (is,sbs+2) vt
+      replaceDimension vrts2 (is,sbs+3) vt
+      replaceDimension vrts2 (js,sbs+2) vtj
+      replaceDimension vrts2 (js,sbs+3) vtj
+      it <- UMV.read iejeitjtisjsls 2
+      jt <- UMV.read iejeitjtisjsls 3
+      vtitIO <- mapIndices (1,nd) (\i -> (i,it,top)) vrts2 :: IO IO1dArray
+      vtjtIO <- mapIndices (1,nd) (\i -> (i,jt,top)) vrts2 :: IO IO1dArray
+      vtit <- (=<<) (return . fromList) (getElems vtitIO)
+      vtjt <- (=<<) (return . fromList) (getElems vtjtIO)
+      let vtt = UV.map (/2) (UV.zipWith (+) vtit vtjt)
+      replaceDimension vrts2 (jt,top) vtt
+      replaceDimension vrts2 (it,sbs+1) vtt
+      replaceDimension vrts2 (jt,sbs+1) vtjt
+      vti2IO <- mapIndices (1,nd) (\i -> (i,it,sbs+2)) vrts2 :: IO IO1dArray
+      vtj2IO <- mapIndices (1,nd) (\i -> (i,jt,sbs+2)) vrts2 :: IO IO1dArray
+      vti2 <- (=<<) (return . fromList) (getElems vti2IO)
+      vtj2 <- (=<<) (return . fromList) (getElems vtj2IO)
+      let vt2 = UV.map (/2) (UV.zipWith (+) vti2 vtj2)
+      replaceDimension vrts2 (jt,sbs+2) vt2
+      replaceDimension vrts2 (it,sbs+3) vt2
+      replaceDimension vrts2 (jt,sbs+3) vtj2
     False -> do
       let vt = UV.map (/3) (UV.zipWith (+) (UV.map (*2) vti) vtj)
-      return ()
+      replaceDimension vrts2 (js,top) vt
+      replaceDimension vrts2 (is,sbs+1) vt
+      case dfmx/cuttf < dfnx of
+        True -> do
+          replaceDimension vrts2 (js,sbs+1) vtj
+          replaceDimension vrts2 (is,sbs+2) vt
+          replaceDimension vrts2 (js,sbs+2) vtj
+          ls <- UMV.read iejeitjtisjsls 6
+          vtj1IO <- mapIndices (1,nd) (\i -> (i,js,sbs+1)) vrts2 :: IO IO1dArray
+          vtl1IO <- mapIndices (1,nd) (\i -> (i,ls,sbs+1)) vrts2 :: IO IO1dArray
+          vtj1 <- (=<<) (return . fromList) (getElems vtj1IO)
+          vtl1 <- (=<<) (return . fromList) (getElems vtl1IO)
+          let vt1 = UV.map (/2) (UV.zipWith (+) vtj1 vtl1)
+          replaceDimension vrts2 (ls,sbs+1) vt1
+          replaceDimension vrts2 (js,sbs+2) vt1
+          replaceDimension vrts2 (ls,sbs+2) vtl1
+        False -> do
+          let vv = UV.map (/3) (UV.zipWith (+) vti (UV.map (*2) vtj))
+          replaceDimension vrts2 (js,sbs+1) vv
+          replaceDimension vrts2 (is,sbs+2) vv
+          replaceDimension vrts2 (js,sbs+2) vtj
   return (nregions, vrts2)
 
 replaceDimension :: IOUArray (Int,Int,Int) Double -> (Int,Int) -> UVectorD -> IO ()
