@@ -35,7 +35,7 @@ type UVectorI = Vector Int
 fromInt :: Int -> Double
 fromInt = fromIntegral
 
-smprms :: Int -> Int -> IO (IOMatrix, IOMatrix, IOVectorI)
+smprms :: Int -> Int -> IO (IOMatrix, IOMatrix, IOVectorI, [UVectorD])
 smprms n key = do
   let (rls, gms, wts) | key == 1 = (3, 2, 3) :: (Int, Int, Int)
                       | key == 2 = (5, 4, 6) :: (Int, Int, Int)
@@ -219,35 +219,38 @@ smprms n key = do
   rows <- mapM array1dToUVectorD rowsIO
   let cols = map (\j -> fromList $ map (\i -> rows!!(i-2) UV.!(j-1)) [2..wts]) [1..rls]
   ptsU <- (=<<) (return.(UV.map fromInt)) (UV.freeze pts)
-  let row1 = map (\j -> 1 - UV.foldr (+) 0 (UV.zipWith (*) ptsU (cols!!(j-1)))) [1..rls]
+  let row1 = map (\j -> 1 - UV.foldr (+) 0 (UV.zipWith (*) (UV.tail ptsU) (cols!!(j-1)))) [1..rls]
 --  let wmat = fromLists (row1 : (map toList rows))
       wcols = map (\j -> UV.cons (row1!!j) (cols!!j)) [0..(rls-1)]
       wcols2 = head wcols : (map (\col -> UV.zipWith (-) col (head wcols)) (tail wcols))
       nb = UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) (head wcols)))
-      ratio = nb / (UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) (wcols!!1))))
-      wcol2 = UV.map (*(sqrt ratio)) (wcols!!1)
+      ratio = nb / (UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) (wcols2!!1))))
+      wcol2 = UV.map (*(sqrt ratio)) (wcols2!!1)
       wcols3 = (head wcols) : (wcol2 : ((tail.tail) wcols2))
       -- goal : foldr updateW wcols3 [3..rls]
-  let updateW :: Int -> [UVectorD] -> [UVectorD]
-      updateW k cols = cols -- XXX
+  let updateW :: [UVectorD] -> Int -> [UVectorD]
+      updateW cols k = [cols!!j | j <- [0..(k-2)]] ++ [wknew] ++ [cols!!j | j <- [k..(rls-1)]]
                        where
-                         ptsW = UV.map (/nb) (UV.zipWith (*) ptsU (cols!!(k-1)))
-                         slice = [cols!!j | j <- [1..(k-2)]]
-                         prod1 = map ((UV.foldr (+) 0).(UV.zipWith (*) ptsW)) slice
-                         -- prod2 = merde c'est les lignes
+                        ptsW = UV.map (/nb) (UV.zipWith (*) ptsU (cols!!(k-1)))
+                        slice = [cols!!j | j <- [1..(k-2)]]
+                        prod1 = fromList $ map ((UV.foldr (+) 0).(UV.zipWith (*) ptsW)) slice
+                        rows = map (\i -> fromList $ map (\j -> slice!!(j-1) UV.!(i-1)) [1..(k-2)]) [1..wts]
+                        prod2 = fromList $ map ((UV.foldr (+) 0).(UV.zipWith (*) prod1)) rows
+                        wk = UV.zipWith (-) (cols!!(k-1)) prod2
+                        ratio = nb / (UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) wk)))
+                        wknew = UV.map (*(sqrt ratio)) wk
+      wcolsnew = foldl updateW wcols3 [3..rls]
   -- W[1, ] <- 1 - PTS[2:WTS] %*% W[2:WTS, ]
   -- NB <- sum(PTS * (W[ ,1]^2));
   -- W[ ,2:RLS] <- W[ ,2:RLS] - W[ ,1,drop=FALSE] %*% matrix(1.0,nrow=1,ncol=RLS-1);
-  -- #
   -- #        Orthogonalize and normalize null rules.
-  -- #
   -- W[ ,2] = W[ ,2]*sqrt( NB/sum(PTS*W[ ,2]^2) )
   -- for (K in 3 : RLS ) {
   --   W[ ,K] = W[ ,K] - W[ ,2:(K-1),drop=FALSE] %*% t(W[ ,2:(K-1),drop=FALSE]) %*% ( PTS*W[ ,K] )/NB
   --   W[ ,K] = W[ ,K]*sqrt( NB/sum(PTS*W[ ,K]^2) )
   -- }
 
-  return (g, w, pts)
+  return (g, w, pts, wcolsnew)
 
 
 
@@ -666,7 +669,7 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
   let dfcost = 1 + 2*nd*(nd+1)
   -- vl <- newArray (1,nf) 0 :: IO IO1dArray
   -- ae <- newArray (1,nf) 0 :: IO IO1dArray
-  (g, w, ptsIO) <- smprms nd key
+  (g, w, ptsIO, _) <- smprms nd key
   pts <- freeze ptsIO
   let fct = fromInt (product [1..nd])
   -- vls <- newArray_ ((1,1),(nf,sbs)) :: IO IOMatrix
