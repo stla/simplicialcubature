@@ -3,7 +3,8 @@ module Simplex
 import           Common
 import           Data.Array.IO      (thaw)
 import           Data.Array.Unboxed (UArray, array)
-import           Data.Matrix        (detLU, elementwiseUnsafe, fromLists)
+import           Data.Matrix        (detLU, elementwiseUnsafe, fromLists,
+                                     multStd)
 
 type Simplex = [[Double]]
 type Simplices = [Simplex]
@@ -41,3 +42,8 @@ simplexVolume s = (abs (detLU v)) / (fromIntegral (product [1..n]))
         m1 = fromLists (tail s)
         m2 = fromLists $ replicate n (head s)
         v = elementwiseUnsafe (-) m1 m2
+
+jacobian :: Simplex -> Double
+jacobian s = abs (detLU (elementwiseUnsafe (-) m1 m2))
+  where m1 = fromLists (tail s)
+        m2 = fromLists $ replicate (length s - 1) (head s)
