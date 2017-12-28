@@ -78,6 +78,8 @@ smprms n key = do
               l1 = -sqrt(0.5 - l2*l2)
               r1 = (1-l1)/3
               s1 = 1 - 2*r1
+          writeArray g (1,gms+1) s1
+          _ <- mapM (\j -> writeArray g (j,gms+1) r1) [2 .. np]
           write pts gms 3
           writeArray w (gms+1,iw-1) (1/6) -- rq: déjà écrit
           let r2 = (1-l2)/3
@@ -222,8 +224,17 @@ smprms n key = do
       wcols = map (\j -> UV.cons (row1!!j) (cols!!j)) [0..(rls-1)]
       wcols2 = head wcols : (map (\col -> UV.zipWith (-) col (head wcols)) (tail wcols))
       nb = UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) (head wcols)))
-      ratio = nb / (UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) (wcols!!1)))) 
+      ratio = nb / (UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) (wcols!!1))))
       wcol2 = UV.map (*(sqrt ratio)) (wcols!!1)
+      wcols3 = (head wcols) : (wcol2 : ((tail.tail) wcols2))
+      -- goal : foldr updateW wcols3 [3..rls]
+  let updateW :: Int -> [UVectorD] -> [UVectorD]
+      updateW k cols = cols -- XXX
+                       where
+                         ptsW = UV.map (/nb) (UV.zipWith (*) ptsU (cols!!(k-1)))
+                         slice = [cols!!j | j <- [1..(k-2)]]
+                         prod1 = map ((UV.foldr (+) 0).(UV.zipWith (*) ptsW)) slice
+                         -- prod2 = merde c'est les lignes
   -- W[1, ] <- 1 - PTS[2:WTS] %*% W[2:WTS, ]
   -- NB <- sum(PTS * (W[ ,1]^2));
   -- W[ ,2:RLS] <- W[ ,2:RLS] - W[ ,1,drop=FALSE] %*% matrix(1.0,nrow=1,ncol=RLS-1);
