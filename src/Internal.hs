@@ -337,4 +337,84 @@ smpdfs nd nf f top sbs vrts = do
                                   inner (j+1) ewd
                                 False -> inner (j+1) y
   step 1 0
+  dfmx <- UMV.read dfmxdfnx 0
+  dfnx <- UMV.read dfmxdfnx 1
+  let nregions = if dfnx > dfmx/cuttf then 4 else 3
+  case dfnx > dfmx/cuttf of
+    True -> return ()
+    False -> do
+      case dfmx == 0 of
+        True -> do
+          ie <- UMV.read iejeitjtisjs 0
+          je <- UMV.read iejeitjtisjs 1
+          write iejeitjtisjs 4 ie
+          write iejeitjtisjs 5 je
+        False -> do
+          let loop :: Int -> Double -> Int -> IO Int
+              loop l x ls | l == nd+2 = return ls
+                          | otherwise = do
+                            is <- UMV.read iejeitjtisjs 4
+                            js <- UMV.read iejeitjtisjs 5
+                            case (l /= is) && (l /= js) of
+                              True -> do
+                                let it = minimum [l,is,js]
+                                    jt = maximum [l,is,js]
+                                write iejeitjtisjs 2 it
+                                write iejeitjtisjs 3 jt
+                                let lt = is+js+l-it-jt
+                                dfr1 <- readArray frthdf (it,lt)
+                                dfr2 <- readArray frthdf (lt,jt)
+                                let dfr = dfr1 + dfr2
+                                case dfr >= x of
+                                  True -> loop (l+1) dfr l
+                                  False -> loop (l+1) x ls
+                              False -> loop (l+1) x ls
+          ls <- loop 1 0 0
+          is <- UMV.read iejeitjtisjs 4
+          js <- UMV.read iejeitjtisjs 5
+          difil <- readArray frthdf (min is ls, max is ls)
+          diflj <- readArray frthdf (min js ls, max js ls)
+          let dfnx = max difil diflj
+          write dfmxdfnx 1 dfnx
+          case dfmx/cuttb < dfnx && difil > diflj of
+            True -> do
+              is <- UMV.read iejeitjtisjs 4
+              js <- UMV.read iejeitjtisjs 5
+              it <- UMV.read iejeitjtisjs 2
+              write iejeitjtisjs 2 is
+              write iejeitjtisjs 4 js
+              write iejeitjtisjs 5 it
+            False -> return ()
+  vrts2 <- newArray_ ((1,1,1),(nd,nd+1,sbs+nregions-1)) :: IO (IOUArray (Int,Int,Int) Double)
+  let go1 :: Int -> IO ()
+      go1 i | i == nd+1 = return ()
+            | otherwise = do
+              let go2 j | j == nd+2 = go1 (i+1)
+                        | otherwise = do
+                          let go3 k | k == sbs+nregions = go2 (j+1)
+                                    | otherwise = do
+                                      case k <= sbs of
+                                        True -> do
+                                          coef <- readArray vrts (i,j,k)
+                                          writeArray vrts2 (i,j,k) coef
+                                        False -> do
+                                          coef <- readArray v (i,j)
+                                          writeArray vrts2 (i,j,k) coef
+                                      go3 (k+1)
+                          go3 1
+              go2 1
+  go1 1
+  is <- UMV.read iejeitjtisjs 4
+  js <- UMV.read iejeitjtisjs 5
+  vtiIO <- extractColumn v is
+  vtjIO <- extractColumn v js
+  vti <- array1dToUVectorD vtiIO
+  vtj <- array1dToUVectorD vtjIO
+  case nregions == 4 of
+    True -> do
+      let vt = UV.map (/2) (UV.zipWith (+) vti vtj)
+      return ()
+    False -> do
+      let vt = UV.map (/3) (UV.zipWith (+) (UV.map (*2) vti) vtj)
+      return ()
   return (0, vrts)
