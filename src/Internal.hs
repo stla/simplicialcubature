@@ -1,7 +1,5 @@
 module Internal
-   where
--- import qualified Data.Array                  as A
---import qualified Data.Array.IArray           as IA
+  where
 import           Common
 import           Data.Array.IArray           (Array)
 import           Data.Array.IO               (IOUArray, getBounds, getElems,
@@ -10,8 +8,10 @@ import           Data.Array.IO               (IOUArray, getBounds, getElems,
                                               writeArray)
 import qualified Data.Array.IO               as IOA
 --import qualified Data.Array.MArray           as MA
+-- import qualified Data.Array                  as A
+--import qualified Data.Array.IArray           as IA
 import qualified Data.Array.Unboxed          as UA
-import Data.Array.Unboxed (UArray)
+import           Data.Array.Unboxed          (UArray)
 import           Control.Monad               ((=<<))
 import           Data.Vector.Unboxed         (Vector, freeze, fromList, toList)
 import qualified Data.Vector.Unboxed         as UV
@@ -19,12 +19,13 @@ import qualified Data.Vector as V
 import           Data.Vector.Unboxed.Mutable (IOVector, new, write)
 import qualified Data.Vector.Unboxed.Mutable as UMV
 import           Math.Combinat.Permutations  (permuteMultiset)
-import           Simplex (Simplex, simplexVolume)
-import           Data.Maybe (fromJust)
+import           Simplex                     (Simplex, simplexVolume)
+import           Data.Maybe                  (fromJust)
+import           Data.Matrix                 (fromLists)
 
 type IOMatrix = IOUArray (Int,Int) Double
 type IO1dArray = IOUArray Int Double
-type Matrix = Array (Int,Int) Double
+type IMatrix = Array (Int,Int) Double
 type UMatrix = UArray (Int,Int) Double
 type IOVectorD = IOVector Double
 type IOVectorI = IOVector Int
@@ -165,7 +166,6 @@ smprms n key = do
     False -> return ()
   case key == 4 of
     True -> do
-      -- iw -> iw-5
       let sg = 1/(fromInt $ 23328*n6)
           u5 = -6^3 * sg * (fromInt $ 52212 - n*(6353 + n*(1934-n*27)))
           u6 =  6^4 * sg * (fromInt $ 7884 - n*(1541 - n*9))
@@ -184,19 +184,61 @@ smprms n key = do
           a2 = -a + r*(cos(th+2*tp))
           a3 = -a + r*(cos(th+tp))
           npdbl = fromInt np
-          writeArray g (1,gms+5) ((1-ndbl*a1)/npdbl)
-          _ <- mapM (\i -> writeArray g (i,gms+5) ((1+a1)/npdbl)) [2..np]
-          write pts (gms+4) np
-          writeArray g (1,gms+6) ((1-ndbl*a2)/npdbl)
-          _ <- mapM (\i -> writeArray g (i,gms+6) ((1+a2)/npdbl)) [2..np]
-          write pts (gms+5) np
-          writeArray g (1,gms+7) ((1-ndbl*a3)/npdbl)
-          _ <- mapM (\i -> writeArray g (i,gms+7) ((1+a3)/npdbl)) [2..np]
-          write pts (gms+6) np
-
-      return () -- XXX
+      writeArray g (1,gms+5) ((1-ndbl*a1)/npdbl)
+      _ <- mapM (\i -> writeArray g (i,gms+5) ((1+a1)/npdbl)) [2..np]
+      write pts (gms+4) np
+      writeArray g (1,gms+6) ((1-ndbl*a2)/npdbl)
+      _ <- mapM (\i -> writeArray g (i,gms+6) ((1+a2)/npdbl)) [2..np]
+      write pts (gms+5) np
+      writeArray g (1,gms+7) ((1-ndbl*a3)/npdbl)
+      _ <- mapM (\i -> writeArray g (i,gms+7) ((1+a3)/npdbl)) [2..np]
+      write pts (gms+6) np
+      writeArray w (gms+5,iw-5)
+                 ((u7-(a2+a3)*u6+a2*a3*u5)/(a1^2-(a2+a3)*a1+a2*a3)/a1^5)
+      writeArray w (gms+6,iw-5)
+                 ((u7-(a1+a3)*u6+a1*a3*u5)/(a2^2-(a1+a3)*a2+a1*a3)/a2^5)
+      writeArray w (gms+7,iw-5)
+                 ((u7-(a2+a1)*u6+a2*a1*u5)/(a3^2-(a2+a1)*a3+a2*a1)/a3^5)
+      writeArray g (1,gms+8) (4/(ndbl+7))
+      writeArray g (2,gms+8) (4/(ndbl+7))
+      _ <- mapM (\i -> writeArray g (i,gms+8) (1/(ndbl+7))) [3..np]
+      write pts (gms+7) (div (np*n) 2)
+      writeArray w (gms+8,iw-5) (10*(ndbl+7)^6/(fromInt $ 729*n6))
+      writeArray g (1,gms+9) (11/(npdbl+7)/2)
+      writeArray g (2,gms+9) (5/(npdbl+7)/2)
+      _ <- mapM (\i -> writeArray g (i,gms+9) (1/(ndbl+7))) [3..np]
+      write pts (gms+7) (np*n)
+      writeArray w (gms+9,iw-5) (64*(ndbl+7)^6/(fromInt $ 6561*n6))
+      writeArray w (4,iw-5) ((-(ndbl+5)^7)/(fromInt $ 64*n6))
+      writeArray w (7,iw-5) (((ndbl+7)^7)/(fromInt $ 64*n6*(n+7)))
+      -- XXX
     False -> return ()
+  rowsIO <- mapM (extractRow w) [2..wts]
+  rows <- mapM array1dToUVectorD rowsIO
+  let cols = map (\j -> fromList $ map (\i -> rows!!(i-2) UV.!(j-1)) [2..wts]) [1..rls]
+  ptsU <- (=<<) (return.(UV.map fromInt)) (UV.freeze pts)
+  let row1 = map (\j -> 1 - UV.foldr (+) 0 (UV.zipWith (*) ptsU (cols!!(j-1)))) [1..rls]
+--  let wmat = fromLists (row1 : (map toList rows))
+      wcols = map (\j -> UV.cons (row1!!j) (cols!!j)) [0..(rls-1)]
+      wcols2 = head wcols : (map (\col -> UV.zipWith (-) col (head wcols)) (tail wcols))
+      nb = UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) (head wcols)))
+      ratio = nb / (UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) (wcols!!1)))) 
+      wcol2 = UV.map (*(sqrt ratio)) (wcols!!1)
+  -- W[1, ] <- 1 - PTS[2:WTS] %*% W[2:WTS, ]
+  -- NB <- sum(PTS * (W[ ,1]^2));
+  -- W[ ,2:RLS] <- W[ ,2:RLS] - W[ ,1,drop=FALSE] %*% matrix(1.0,nrow=1,ncol=RLS-1);
+  -- #
+  -- #        Orthogonalize and normalize null rules.
+  -- #
+  -- W[ ,2] = W[ ,2]*sqrt( NB/sum(PTS*W[ ,2]^2) )
+  -- for (K in 3 : RLS ) {
+  --   W[ ,K] = W[ ,K] - W[ ,2:(K-1),drop=FALSE] %*% t(W[ ,2:(K-1),drop=FALSE]) %*% ( PTS*W[ ,K] )/NB
+  --   W[ ,K] = W[ ,K]*sqrt( NB/sum(PTS*W[ ,K]^2) )
+  -- }
+
   return (g, w, pts)
+
+
 
 matprod :: IOMatrix -> [Double] -> IO UVectorD
 matprod mat x = do
@@ -247,7 +289,7 @@ outerProduct x1 x2 = do
                   step i (j+1)
   step 1 1
 
-testouterProduct :: IO Matrix
+testouterProduct :: IO IMatrix
 testouterProduct = do
   x1 <- newListArray (1,2) [1, 2] :: IO IO1dArray
   x2 <- newListArray (1,3) [1, 2, 3] :: IO IO1dArray
