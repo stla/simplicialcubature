@@ -1,0 +1,7 @@
+resolver: nightly-2017-12-13
+
+packages:
+- .
+
+extra-deps:
+ - combinat-0.2.8.2

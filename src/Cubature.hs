@@ -43,4 +43,4 @@ fExample2 v = UV.singleton $ sqrt((x!!3-x!!2)/(x!!1-x!!0))*exp(-(x!!1-x!!0))
   where y = UV.toList v
         x = map (\i -> sum $ take i y) [1..4]
 
-example2 rule = integrateOnSimplex fExample2 [canonicalSimplex 4] 1 10000 0 1e-5 rule
+example2 maxevals rule = integrateOnSimplex fExample2 [canonicalSimplex 4] 1 maxevals 0 1e-5 rule

@@ -1,0 +1,72 @@
+name:                simplicialcubature
+version:             0.1.0.0
+-- synopsis:
+description:         Multidimensional integration on simplexes
+homepage:            https://github.com/stla/simplicialcubature#readme
+license:             GPL-3
+author:              Stéphane Laurent
+maintainer:          laurent_step@yahoo.fr
+copyright:           2017 Stéphane Laurent
+category:            Math, Numerical
+build-type:          Simple
+extra-source-files:  README.md
+cabal-version:       >=1.10
+
+flag dll
+  description:
+    Build the DLL.
+  default: False
+
+flag exe
+  description:
+    Build the executable.
+  default: False
+
+library
+  hs-source-dirs:      src
+  exposed-modules:     Common
+                     , Internal
+                     , Simplex
+                     , Cubature
+  build-depends:       base >= 4.7 && < 5
+                     , combinat
+                     , array
+                     , vector
+                     , matrix
+                     , containers
+  default-language:    Haskell2010
+  ghc-options:         -Wall
+
+executable test
+  if flag(exe)
+    buildable: True
+  else
+    buildable: False
+  hs-source-dirs:      src-exe
+  main-is:             Main.hs
+  default-language:    Haskell2010
+  build-depends:       base >= 4.7 && < 5
+                     , simplicialcubature
+
+foreign-library simplicialcubature
+  if flag(dll)
+    buildable: True
+  else
+    buildable: False
+  type:                native-shared
+  lib-version-info:    0:1:0
+  if os(Windows)
+    options:      standalone
+--    mod-def-file: exports.def
+  other-modules:       Export
+  build-depends:       base >=4.7 && <5
+                     , simplicialcubature
+                     , vector
+  hs-source-dirs:      src-dll
+  c-sources:           StartEnd.c
+  ghc-options:         "-fllvm"
+  default-language:    Haskell2010
+
+source-repository head
+  type:     git
+  location: https://github.com/stla/simplicialcubature
