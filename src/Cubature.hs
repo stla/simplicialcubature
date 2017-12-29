@@ -32,3 +32,15 @@ example' rule = integrateOnSimplex fExample' [canonicalSimplex 3] 2 10000 0 1e-5
 
 -- rule 2 ok
 -- rule 1 bizarre si je change une composante ça change le résultat de l'autre
+-- ok si je réduis maxEvals :
+-- *Cubature> integrateOnSimplex fExample [canonicalSimplex 3] 2 10000 0 1e-5 1
+-- ([1.485486158822895,0.48644692253316674],[1.485486158822925e-12,0.2675948891062603],9954,True)
+-- *Cubature> integrateOnSimplex fExample [canonicalSimplex 3] 2 30 0 1e-5 1
+-- ([0.125,4.9999999999999996e-2],[1.25e-13,0.4048388923847347],9,True)
+-- => instabilité numérique ?
+fExample2 :: UVectorD -> UVectorD
+fExample2 v = UV.singleton $ sqrt((x!!3-x!!2)/(x!!1-x!!0))*exp(-(x!!1-x!!0))
+  where y = UV.toList v
+        x = map (\i -> sum $ take i y) [1..4]
+
+example2 rule = integrateOnSimplex fExample2 [canonicalSimplex 4] 1 10000 0 1e-5 rule

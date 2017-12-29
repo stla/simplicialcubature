@@ -4,7 +4,7 @@ import           Common
 import           Data.Array.IO      (thaw)
 import           Data.Array.Unboxed (UArray, array)
 import           Data.Matrix        (detLU, elementwiseUnsafe, fromLists,
-                                     multStd)
+                                     multStd, detLaplace)
 
 type Simplex = [[Double]]
 type Simplices = [Simplex]
@@ -37,7 +37,7 @@ canonicalSimplex dim =
     (map (\v -> map (fromIntegral.fromEnum.(== v)) [1..dim]) [1..dim])
 
 simplexVolume :: Simplex -> Double
-simplexVolume s = (abs (detLU v)) / (fromIntegral (product [1..n]))
+simplexVolume s = (abs (detLaplace v)) / (fromIntegral (product [1..n]))
   where n = length s - 1
         m1 = fromLists (tail s)
         m2 = fromLists $ replicate n (head s)

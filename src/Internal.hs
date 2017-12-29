@@ -703,8 +703,10 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
       aes = V.fromListN sbs rgnerrs'
       vls = V.fromListN sbs basvals'
   let fl = UV.any (> (max ea (UV.maximum (UV.map ((*er).abs) vl)))) ae
+  -- let loop :: Params -> IO (UVectorD, UVectorD, Int, Bool)
+  --     loop params | not fl || (nv+dfcost+4*rcls > mxfs) = return (vl, ae, nv, fl)
   let loop :: Params -> IO (UVectorD, UVectorD, Int, Bool)
-      loop params | not fl || (nv+dfcost+4*rcls > mxfs) = return (vl, ae, nv, fl)
+      loop params | not fl || (nv+dfcost+4*rcls > mxfs) = return (rowSumsV vls, rowSumsV aes, nv, fl)
                   | otherwise = do
                     let maxs = V.map (UV.maximum) aes
                         id = fromJust $ V.findIndex (== V.maximum maxs) maxs
@@ -716,7 +718,7 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
                         sbs2 = sbs + (nregions-1)
                     matrices <- mapM
                                 (\k -> mapIndices ((1,1),(nd,nd+1)) (\(i,j) -> (i,j,k)) vrts2)
-                                [(sbs+1)..(sbs+nregions-1)]
+                                ((id+1):[(sbs+1)..(sbs+nregions-1)])
                     (basvals, rgnerrs) <- (=<<) (return.unzip)
                                           (mapM (\m ->
                                                   smprul m nf f vi g w pts)
@@ -725,25 +727,22 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
                     basvals' <- mapM array1dToUVectorD basvals
                     let vl2 = UV.zipWith (+) vl0 (foldl1 (UV.zipWith (+)) basvals')
                         ae2 = UV.zipWith (+) ae0 (foldl1 (UV.zipWith (+)) rgnerrs')
-                        aes2 = V.fromList rgnerrs' -- fromListN (nregions-1)
-                        vls2 = V.fromList basvals'
+                        aes2 = (aes V.// [(id, head rgnerrs')]) V.++ (V.tail (V.fromList rgnerrs')) -- fromListN (nregions-1)
+                        vls2 = (vls V.// [(id, head basvals')]) V.++ (V.tail (V.fromList basvals'))
                         fl2 = UV.any (> (max ea (UV.maximum (UV.map ((*er).abs) vl2)))) ae2
-                        vol2 = vol ++ (replicate (nregions-1) vi)
+                        vol2_temp = vol ++ (replicate (nregions-1) vi)
+                        vol2 = map (\i -> if (i == id) then vi else (vol2_temp!!i)) [0..(length vol2_temp - 1)]
                     loop (fl2, nv2, sbs2, aes2, vls2, ae2, vl2, vrts2, vol2)
                   where
                     (fl, nv, sbs, aes, vls, ae, vl, vrts, vol) = params
   -- dans le code R il fait rowSums mais ça me semble inutile
   loop (fl, nv, sbs, aes, vls, ae, vl, vrts, vol)
 
-
---  return (fromList [], fromList [], 0, 0)
---   where
---     untilFun :: TTT -> TTT
---     untilFun ttt = do
---       (fl, nv, aes, vls, ae, vl) <- ttt
--- type TTT = IO (Bool, Int, V.Vector UVectorD, V.Vector UVectorD, UVectorD, UVectorD)
 type Params =
   (Bool, Int, Int, V.Vector UVectorD, V.Vector UVectorD, UVectorD, UVectorD, IO3dArray, [Double])
+
+rowSumsV :: V.Vector UVectorD -> UVectorD
+rowSumsV = V.foldl1 (UV.zipWith (+))
 
 matrixFromColumns :: [IO1dArray] -> IO UMatrix
 matrixFromColumns columns = do
