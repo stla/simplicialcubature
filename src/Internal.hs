@@ -318,7 +318,7 @@ transpose cols =
   fmap (\i -> (fromList.(DF.toList)) $ fmap (\col -> col UV.!i) cols)
        (S.fromList ([0..(UV.length (index cols 0) - 1)]))
 
-matprod :: IOMatrix -> [Double] -> IO UVectorD
+matprod :: IOMatrix -> UVectorD -> IO UVectorD
 matprod mat x = do
   (_, (m,n)) <- getBounds mat
   out <- UMV.new m :: IO IOVectorD
@@ -331,14 +331,15 @@ matprod mat x = do
       innerstep i j s | j == n+1 = return s
                       | otherwise = do
                        mat_ij <- readArray mat (i,j)
-                       innerstep i (j+1) (s + mat_ij * (x !! (j-1)))
-  step 1
+                       innerstep i (j+1) (s + mat_ij * (x UV.! (j-1)))
+  step 1 
 
 smpsms :: IOMatrix -> Int -> (UVectorD -> UVectorD) -> IO1dArray
        -> Double -> IO IO1dArray
 smpsms vertex nf f g scalar = do
   gAsList <- getElems g
-  f_gPermuts <- mapM ((fmap f).(matprod vertex)) (permuteMultiset gAsList)
+  f_gPermuts <- mapM ((fmap f).(matprod vertex).fromList)
+                     (permuteMultiset gAsList)
   newListArray (1,nf)
                (toList (UV.map (*scalar) (foldl1 (UV.zipWith (+)) f_gPermuts)))
 
@@ -352,40 +353,51 @@ extractRow m i = do
   (_, (_,ncol)) <- getBounds m
   mapIndices (1,ncol) (\j -> (i,j)) m
 
-outerProduct :: IO1dArray -> IO1dArray -> IO IOMatrix
-outerProduct x1 x2 = do
-  (_, n1) <- getBounds x1
-  (_, n2) <- getBounds x2
-  out <- newArray_ ((1,1),(n1,n2)) :: IO IOMatrix
-  let step :: Int -> Int -> IO IOMatrix
-      step i j | i == n1 && j == n2+1 = return out
-               | j == n2+1 = step (i+1) 1
-               | otherwise = do
-                  x1_i <- readArray x1 i
-                  x2_j <- readArray x2 j
-                  writeArray out (i,j) (x1_i * x2_j)
-                  step i (j+1)
-  step 1 1
-
-testouterProduct :: IO IMatrix
-testouterProduct = do
-  x1 <- newListArray (1,2) [1, 2] :: IO IO1dArray
-  x2 <- newListArray (1,3) [1, 2, 3] :: IO IO1dArray
-  (>>=) (outerProduct x1 x2) IOA.freeze
+-- outerProduct :: IO1dArray -> IO1dArray -> IO IOMatrix
+-- outerProduct x1 x2 = do
+--   (_, n1) <- getBounds x1
+--   (_, n2) <- getBounds x2
+--   out <- newArray_ ((1,1),(n1,n2)) :: IO IOMatrix
+--   let step :: Int -> Int -> IO IOMatrix
+--       step i j | i == n1 && j == n2+1 = return out
+--                | j == n2+1 = step (i+1) 1
+--                | otherwise = do
+--                   x1_i <- readArray x1 i
+--                   x2_j <- readArray x2 j
+--                   writeArray out (i,j) (x1_i * x2_j)
+--                   step i (j+1)
+--   step 1 1
+--
+-- testouterProduct :: IO IMatrix
+-- testouterProduct = do
+--   x1 <- newListArray (1,2) [1, 2] :: IO IO1dArray
+--   x2 <- newListArray (1,3) [1, 2, 3] :: IO IO1dArray
+--   (>>=) (outerProduct x1 x2) IOA.freeze
 
 outerProduct2 :: IO1dArray -> UVectorD -> IO IOMatrix
 outerProduct2 x1 x2 = do
   (_, n1) <- getBounds x1
   let n2 = UV.length x2
   out <- newArray_ ((1,1),(n1,n2)) :: IO IOMatrix
-  let step :: Int -> Int -> IO IOMatrix
-      step i j | i == n1 && j == n2+1 = return out
-               | j == n2+1 = step (i+1) 1
-               | otherwise = do
-                  x1_i <- readArray x1 i
-                  writeArray out (i,j) (x1_i * (x2 UV.! (j-1)))
-                  step i (j+1)
-  step 1 1
+  -- let step :: Int -> Int -> IO IOMatrix
+  --     step i j | i == n1 && j == n2+1 = return out
+  --              | j == n2+1 = step (i+1) 1
+  --              | otherwise = do
+  --                 x1_i <- readArray x1 i -- tu accèdes n1*n2 fois chaque indice - tupourrais éviter avec inner
+  --                 writeArray out (i,j) (x1_i * (x2 UV.! (j-1)))
+  --                 step i (j+1)
+  -- step 1 1
+  let step :: Int -> IO IOMatrix
+      step i | i == n1+1 = return out
+             | otherwise = do
+                x1_i <- readArray x1 i
+                inner x1_i 0
+              where
+                inner x j | j == n2 = step (i+1)
+                          | otherwise = do
+                              writeArray out (i,j+1) (x * (x2 UV.! j))
+                              inner x (j+1)
+  step 1
 
 sumMatrices :: [IOMatrix] -> IO IOMatrix
 sumMatrices matrices = do
@@ -393,7 +405,7 @@ sumMatrices matrices = do
   out <- newArray_ ((1,1),(n1,n2)) :: IO IOMatrix
   let step :: Int -> Int -> IO IOMatrix
       step i j | i == n1 && j == n2+1 = return out
-               | j == n2+1 = step (i+1) 1
+               | j == n2+1 = step (i+1) 1 -- avec un inner tu gagnerais un test
                | otherwise = do
                  coefs <- mapM (\m -> readArray m (i,j)) matrices
                  writeArray out (i,j) (sum coefs)

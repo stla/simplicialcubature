@@ -45,3 +45,11 @@ fExample2 v = UV.singleton $ sqrt((x!!3-x!!2)/(x!!1-x!!0))*(1+expm1(-(x!!1-x!!0)
         x = map (\i -> sum $ take i y) [1..4]
 
 example2 maxevals rule = integrateOnSimplex fExample2 [canonicalSimplex 4] 1 maxevals 0 1e-5 rule
+
+fExample2' :: UVectorD -> UVectorD
+fExample2' v = UV.singleton $ sqrt((x!!3-x!!2)/(x!!1-x!!0))*(1+expm1(-(x!!1-x!!0)))
+  where x = UV.toList v
+
+example2' maxevals rule = integrateOnSimplex fExample2'
+                          [[[0,0,0,0],[1,1,1,1],[0,1,1,1],[0,0,1,1],[0,0,0,1]]]
+                          1 maxevals 0 1e-5 rule
