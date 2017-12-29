@@ -25,7 +25,7 @@ simplicesToArray :: Simplices -> IO IO3dArray
 simplicesToArray simplices = do
   let dim = length (head (head simplices))
       nsimplices = length simplices
-      assocList = map (\[i,j,k] -> ((i,j,k), (simplices !! k) !! j !! i))
+      assocList = map (\[i,j,k] -> ((i,j,k), (simplices!!(k-1))!!(j-1)!!(i-1)))
                       (sequence [[1..dim], [1..(dim+1)], [1..nsimplices]])
       arr = array ((1,1,1),(dim,dim+1,nsimplices)) assocList
             :: UArray (Int,Int,Int) Double

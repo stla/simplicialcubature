@@ -681,18 +681,18 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
   -- ae <- newArray (1,nf) 0 :: IO IO1dArray
   (g, w, ptsIO) <- smprms nd key
   pts <- freeze ptsIO
-  let fct = fromInt (product [1..nd])
+  -- let fct = fromInt (product [1..nd]) -- je m'en sers ?
   -- vls <- newArray_ ((1,1),(nf,sbs)) :: IO IOMatrix
   -- aes <- newArray_ ((1,1),(nf,sbs)) :: IO IOMatrix
-  simplices <- mapM (toSimplex vrts nd) [1..sbs]
+  simplices <- mapM (toSimplex vrts (nd+1)) [1..sbs]
   let vol = map simplexVolume simplices
       nv = sbs*rcls
   matrices <- mapM
               (\k -> mapIndices ((1,1),(nd,nd+1)) (\(i,j) -> (i,j,k)) vrts)
               [1..sbs]
-  (rgnerrs, basvals) <- (=<<) (return.unzip)
+  (basvals, rgnerrs) <- (=<<) (return.unzip)
                         (mapM (\k ->
-                                smprul (matrices!!k) nf f (vol!!(k-1)) g w pts)
+                                smprul (matrices!!(k-1)) nf f (vol!!(k-1)) g w pts)
                         [1..sbs])
   -- aes <- matrixFromColumns rgnerrs
   -- vls <- matrixFromColumns basvals
@@ -707,17 +707,17 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
       loop params | not fl || (nv+dfcost+4*rcls > mxfs) = return (vl, ae, nv, fl)
                   | otherwise = do
                     let maxs = V.map (UV.maximum) aes
-                        id = fromJust $ V.findIndex (== maximum maxs) maxs
+                        id = fromJust $ V.findIndex (== V.maximum maxs) maxs
                         vl0 = UV.zipWith (-) vl (vls V.! id)
                         ae0 = UV.zipWith (-) ae (aes V.! id)
-                    (nregions, vrts2) <- smpdfs nd nf f id sbs vrts
+                    (nregions, vrts2) <- smpdfs nd nf f (id+1) sbs vrts
                     let vi = (vol!!id)/(fromInt nregions)
                         nv2 = nv + (nregions-1)*rcls
                         sbs2 = sbs + (nregions-1)
                     matrices <- mapM
                                 (\k -> mapIndices ((1,1),(nd,nd+1)) (\(i,j) -> (i,j,k)) vrts2)
                                 [(sbs+1)..(sbs+nregions-1)]
-                    (rgnerrs, basvals) <- (=<<) (return.unzip)
+                    (basvals, rgnerrs) <- (=<<) (return.unzip)
                                           (mapM (\m ->
                                                   smprul m nf f vi g w pts)
                                           matrices)
@@ -725,14 +725,15 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
                     basvals' <- mapM array1dToUVectorD basvals
                     let vl2 = UV.zipWith (+) vl0 (foldl1 (UV.zipWith (+)) basvals')
                         ae2 = UV.zipWith (+) ae0 (foldl1 (UV.zipWith (+)) rgnerrs')
-                        aes2 = V.fromListN (nregions-1) rgnerrs'
-                        vls2 = V.fromListN (nregions-1) basvals'
-                        fl2 = UV.any (> (max ea (UV.maximum (UV.map ((*er).abs) vl2)))) ae
-                    loop (fl2, nv2, sbs2, aes2, vls2, ae2, vl2, vrts2)
+                        aes2 = V.fromList rgnerrs' -- fromListN (nregions-1)
+                        vls2 = V.fromList basvals'
+                        fl2 = UV.any (> (max ea (UV.maximum (UV.map ((*er).abs) vl2)))) ae2
+                        vol2 = vol ++ (replicate (nregions-1) vi)
+                    loop (fl2, nv2, sbs2, aes2, vls2, ae2, vl2, vrts2, vol2)
                   where
-                    (fl, nv, sbs, aes, vls, ae, vl, vrts) = params
-  -- dans le code R il fair rowSums mais ça me semble inutile
-  loop (fl, nv, sbs, aes, vls, ae, vl, vrts)
+                    (fl, nv, sbs, aes, vls, ae, vl, vrts, vol) = params
+  -- dans le code R il fait rowSums mais ça me semble inutile
+  loop (fl, nv, sbs, aes, vls, ae, vl, vrts, vol)
 
 
 --  return (fromList [], fromList [], 0, 0)
@@ -742,7 +743,7 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
 --       (fl, nv, aes, vls, ae, vl) <- ttt
 -- type TTT = IO (Bool, Int, V.Vector UVectorD, V.Vector UVectorD, UVectorD, UVectorD)
 type Params =
-  (Bool, Int, Int, V.Vector UVectorD, V.Vector UVectorD, UVectorD, UVectorD, IO3dArray)
+  (Bool, Int, Int, V.Vector UVectorD, V.Vector UVectorD, UVectorD, UVectorD, IO3dArray, [Double])
 
 matrixFromColumns :: [IO1dArray] -> IO UMatrix
 matrixFromColumns columns = do
@@ -752,9 +753,6 @@ matrixFromColumns columns = do
   let assocs = map UA.assocs u1darrays
   let assocs' = map (\k -> map (\(i,e) -> ((k,i),e)) (assocs !! (k-1))) [1..ncol]
   return $ UA.array ((1,1),(nrow,ncol)) (concat assocs')
-
-
-
 
 
 toSimplex :: IO3dArray -> Int -> Int -> IO Simplex
