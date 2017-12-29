@@ -159,6 +159,9 @@ smprms n key = do
       _ <- mapM (\i -> writeArray g (i,6) (1/(ndbl+7))) [3 .. np]
       write pts 5 (np*n)
       _ <- mapM (\i -> writeArray g (i,7) (3/(ndbl+7))) [1,2,3]
+      case np > 3 of
+        True -> mapM (\i -> writeArray g (i,7) (1/(ndbl+7))) [4..np]
+        False -> return [()]
       write pts 6 (div ((n-1)*n*np) 6)
       writeArray w (2,iw-4) ((ndbl+3)^7/(fromInt $ 128*n4*(n+5)))
       _ <- mapM
@@ -768,8 +771,10 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
   matrices <- mapM
               (\k -> mapIndices ((1,1),(nd,nd+1)) (\(i,j) -> (i,j,k)) vrts)
               (S.fromList [1..sbs])
-  br <- (mapM (\k -> smprul (index matrices k) nf f (index vol k) g w pts)
-                        (S.fromList [0..(sbs-1)]))
+  -- br <- (mapM (\k -> smprul (index matrices k) nf f (index vol k) g w pts)
+  --                       (S.fromList [0..(sbs-1)])) --
+  br <- mapM (\(m,v) -> smprul m nf f v g w pts)
+                        (S.zip matrices vol) --
   rgnerrs' <- mapM (array1dToUVectorD.snd) br
   basvals' <- mapM (array1dToUVectorD.fst) br
   let vl = foldl1 (UV.zipWith (+)) basvals'
@@ -801,8 +806,6 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
                         vls2 = (update id (index basvals' 0) vls) >< (S.drop 1 basvals')
                         fl2 = UV.any (> (max ea (UV.maximum (UV.map ((*er).abs) vl2)))) ae2
                         vol2 = (update id vi vol) >< (S.replicate (nregions-1) vi)
-                        -- vol2_temp = vol ++ (replicate (nregions-1) vi)
-                        -- vol2 = map (\i -> if (i == id) then vi else (vol2_temp!!i)) [0..(length vol2_temp - 1)]
                     loop (fl2, nv2, sbs2, aes2, vls2, ae2, vl2, vrts2, vol2)
                   where
                     (fl, nv, sbs, aes, vls, ae, vl, vrts, vol) = params
