@@ -53,7 +53,8 @@ smprms n key = do
       n6 = n4 * (n+5) * (n+6)
       n8 = n6 * (n+7) * (n+8)
       ndbl = fromInt n
-      r1 = (ndbl + 4 - sqrt(15)) / (ndbl*ndbl + 8*ndbl + 1)
+      sqrt15 = 3.872983346207416885179265399782399611
+      r1 = (ndbl + 4 - sqrt15) / (ndbl*ndbl + 8*ndbl + 1)
       s1 = 1 - ndbl*r1
       l1 = s1 - r1
   _ <- mapM (\j -> writeArray g (j,1) (1/(ndbl+1))) [1 .. np]
@@ -91,7 +92,7 @@ smprms n key = do
           write pts (gms+1) 3
           writeArray w (gms+2,iw-1) (1/6)
         False -> do
-          let r2 = (ndbl+4+sqrt(15)) / (ndbl*ndbl+8*ndbl+1)
+          let r2 = (ndbl+4+sqrt15) / (ndbl*ndbl+8*ndbl+1)
               s2 = 1 - ndbl*r2
               l2 = s2 - r2
           writeArray g (1,gms+2) s2
@@ -113,34 +114,34 @@ smprms n key = do
     False -> return ()
   case key > 2 of
     True -> do
-      let u1 = (ndbl+7+2*sqrt(15)) / (ndbl^2+14*ndbl-11)
+      let u1 = (ndbl+7+2*sqrt15) / (ndbl^2+14*ndbl-11)
           v1 = (1-(ndbl-1)*u1)/2
           d1 = v1 - u1
       writeArray g (1,gms+3) v1
       writeArray g (2,gms+3) v1
       _ <- mapM (\j -> writeArray g (j,gms+3) u1) [3 .. np]
       write pts (gms+2) (div (n*np) 2)
-      let u2 = (ndbl+7-2*sqrt(15)) / (ndbl^2+14*ndbl-11)
+      let u2 = (ndbl+7-2*sqrt15) / (ndbl^2+14*ndbl-11)
           v2 = (1-(ndbl-1)*u2)/2
-          d2 = v2 - u2
+          d2 = v2 - u2 -- utilisé?
       writeArray g (1,gms+4) v2
       writeArray g (2,gms+4) v2
       _ <- mapM (\j -> writeArray g (j,gms+4) u2) [3 .. np]
       write pts (gms+3) (div (n*np) 2)
       case n == 2 of
         True -> do
-          writeArray w (gms+3,iw-3) ((155-sqrt(15))/1200)
-          writeArray w (gms+4,iw-3) ((155+sqrt(15))/1200)
+          writeArray w (gms+3,iw-3) ((155-sqrt15)/1200)
+          writeArray w (gms+4,iw-3) ((155+sqrt15)/1200)
           writeArray w (1,iw-3) (1 - 31/40)
         False -> do
           case n == 3 of
             True -> do
-              writeArray w (gms+1,iw-3) ((2665+14*sqrt(15))/37800)
-              writeArray w (gms+2,iw-3) ((2665-14*sqrt(15))/37800)
+              writeArray w (gms+1,iw-3) ((2665+14*sqrt15)/37800)
+              writeArray w (gms+2,iw-3) ((2665-14*sqrt15)/37800)
               writeArray w (gms+3,iw-3) (2*15/567)
               write pts (gms+3) 0
             False -> do
-              let r2 = (ndbl+4+sqrt(15)) / (ndbl*ndbl+8*ndbl+1)
+              let r2 = (ndbl+4+sqrt15) / (ndbl*ndbl+8*ndbl+1)
                   l2 = 1 - (ndbl+1)*r2
                   den = l1^4*(l1-l2)*(fromInt n4)
               writeArray w (gms+1,iw-3)
@@ -214,11 +215,37 @@ smprms n key = do
       writeArray g (1,gms+9) (11/(npdbl+7)/2)
       writeArray g (2,gms+9) (5/(npdbl+7)/2)
       _ <- mapM (\i -> writeArray g (i,gms+9) (1/(ndbl+7))) [3..np]
-      write pts (gms+7) (np*n)
+      write pts (gms+8) (np*n)
       writeArray w (gms+9,iw-5) (64*(ndbl+7)^6/(fromInt $ 6561*n6))
       writeArray w (4,iw-5) ((-(ndbl+5)^7)/(fromInt $ 64*n6))
       writeArray w (7,iw-5) (((ndbl+7)^7)/(fromInt $ 64*n6*(n+7)))
-      -- XXX
+      writeArray g (1,8) (9/(ndbl+9))
+      _ <- mapM (\i -> writeArray g (i,8) (1/(ndbl+9))) [2..np]
+      write pts 7 np
+      writeArray g (1,9) (7/(ndbl+9))
+      writeArray g (2,9) (3/(ndbl+9))
+      _ <- mapM (\i -> writeArray g (i,9) (1/(ndbl+9))) [3..np]
+      write pts 8 (np*n)
+      _ <- mapM (\i -> writeArray g (i,10) (5/(ndbl+9))) [1,2]
+      _ <- mapM (\i -> writeArray g (i,10) (1/(ndbl+9))) [3..np]
+      write pts 9 (div (np*n) 2)
+      writeArray g (1,11) (5/(ndbl+9))
+      _ <- mapM (\i -> writeArray g (i,11) (3/(ndbl+9))) [2,3]
+      case np > 3 of
+        True -> mapM (\i -> writeArray g (i,11) (1/(ndbl+9))) [4..np]
+        False -> return [()]
+      write pts 10 (div (np*n*(n-1)) 2)
+      writeArray w (2,iw-6) (- (ndbl+3)^9/(fromInt $ 6*256*n6))
+      _ <- mapM (\i -> writeArray w (i,iw-6) ((ndbl+5)^9/(fromInt $ 512*n6*(n+7)))) [3,4]
+      _ <- mapM (\i -> writeArray w (i,iw-6) (-(ndbl+7)^9/(fromInt $ 256*n8))) [5,6,7]
+      _ <- mapM (\i -> writeArray w (i,iw-6) ((ndbl+9)^9/(fromInt $ 256*n8*(n+9)))) [8..11]
+      case n > 2 of
+        True ->  do
+          mapM (\i -> writeArray g (i,12) (3/(ndbl+9))) [1..4]
+          mapM (\i -> writeArray g (i,12) (1/(ndbl+9))) [5..np]
+          write pts 11 (div (np*n*(n-1)*(n-2)) 24)
+          writeArray w (12,iw-6) ((ndbl+9)^9/(fromInt $ 256*n8*(n+9)))
+        False -> return ()
     False -> return ()
   rowsIO <- mapM (extractRow w) [2..wts]
   rows <- mapM array1dToUVectorD rowsIO
@@ -249,11 +276,10 @@ smprms n key = do
       wcolsnew = foldl updateW wcols3 [3..rls]
   return (g, transpose wcolsnew, pts)
 
-transpose :: [UVectorD] -> [UVectorD] -- à utiliser 2 fois avant
+transpose :: [UVectorD] -> [UVectorD]
 transpose cols =
   map (\i -> fromList $ map (\j -> cols!!j UV.!i)
       [0..(length cols - 1)]) [0..(UV.length (head cols) - 1)]
-
 
 matprod :: IOMatrix -> [Double] -> IO UVectorD
 matprod mat x = do

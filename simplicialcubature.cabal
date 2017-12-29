@@ -1,7 +1,7 @@
 name:                simplicialcubature
 version:             0.1.0.0
 -- synopsis:
-description:         Multidimensional integration on simplexes
+description:         Multidimensional integration on simplices
 homepage:            https://github.com/stla/simplicialcubature#readme
 license:             GPL-3
 author:              Stéphane Laurent
