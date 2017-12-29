@@ -331,15 +331,15 @@ outerProduct2 x1 x2 = do
       n2 = UV.length x2
   out <- newArray_ ((1,1),(n1,n2)) :: IO IOMatrix
   let step :: Int -> IO UMatrix
-      step i | i == n1+1 = IOA.freeze out
+      step i | i == n1 = IOA.freeze out
              | otherwise = do
                 inner (x1 UV.! i) 0
               where
                 inner x j | j == n2 = step (i+1)
                           | otherwise = do
-                              writeArray out (i,j+1) (x * (x2 UV.! j))
+                              writeArray out (i+1,j+1) (x * (x2 UV.! j))
                               inner x (j+1)
-  step 1
+  step 0
 
 sumMatrices :: [UMatrix] -> IO UMatrix
 sumMatrices matrices = do

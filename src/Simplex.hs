@@ -31,6 +31,14 @@ simplicesToArray simplices = do
             :: UArray (Int,Int,Int) Double
   thaw arr
 
+simplicesToArray2 :: Simplices -> IO (UArray (Int,Int,Int) Double) -- U3dArray
+simplicesToArray2 simplices = do
+  let dim = length (head (head simplices))
+      nsimplices = length simplices
+      assocList = map (\[i,j,k] -> ((i,j,k), (simplices!!(k-1))!!(j-1)!!(i-1)))
+                      (sequence [[1..dim], [1..(dim+1)], [1..nsimplices]])
+  return $ array ((1,1,1),(dim,dim+1,nsimplices)) assocList
+
 canonicalSimplex :: Int -> Simplex
 canonicalSimplex dim =
   (replicate dim 0) :
