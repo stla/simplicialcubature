@@ -123,7 +123,7 @@ smprms n key = do
       write pts (gms+2) (div (n*np) 2)
       let u2 = (ndbl+7-2*sqrt15) / (ndbl^2+14*ndbl-11)
           v2 = (1-(ndbl-1)*u2)/2
-          d2 = v2 - u2 -- utilisé?
+          d2 = v2 - u2 -- utilisé? oui plus bas
       writeArray g (1,gms+4) v2
       writeArray g (2,gms+4) v2
       _ <- mapM (\j -> writeArray g (j,gms+4) u2) [3 .. np]
@@ -212,8 +212,8 @@ smprms n key = do
       _ <- mapM (\i -> writeArray g (i,gms+8) (1/(ndbl+7))) [3..np]
       write pts (gms+7) (div (np*n) 2)
       writeArray w (gms+8,iw-5) (10*(ndbl+7)^6/(fromInt $ 729*n6))
-      writeArray g (1,gms+9) (11/(npdbl+7)/2)
-      writeArray g (2,gms+9) (5/(npdbl+7)/2)
+      writeArray g (1,gms+9) (11/(ndbl+7)/2)
+      writeArray g (2,gms+9) (5/(ndbl+7)/2)
       _ <- mapM (\i -> writeArray g (i,gms+9) (1/(ndbl+7))) [3..np]
       write pts (gms+8) (np*n)
       writeArray w (gms+9,iw-5) (64*(ndbl+7)^6/(fromInt $ 6561*n6))
