@@ -37,7 +37,7 @@ type UVectorI = Vector Int
 fromInt :: Int -> Double
 fromInt = fromIntegral
 
-smprms :: Int -> Int -> IO (IOMatrix, [UVectorD], IOVectorI)
+smprms :: Int -> Int -> IO (IOMatrix, Seq UVectorD, IOVectorI)
 smprms n key = do
   let (rls, gms, wts) | key == 1 = (3, 2, 3) :: (Int, Int, Int)
                       | key == 2 = (5, 4, 6) :: (Int, Int, Int)
@@ -72,7 +72,7 @@ smprms n key = do
   _ <- mapM (\j -> writeArray g (j,2) (1/(ndbl+3))) [2 .. np]
   write pts 1 np
   let n2double = fromInt n2 :: Double
-  writeArray w (2,iw) ((ndbl+3)^3 / (4*n2double*(ndbl+3)))
+  writeArray w (2,iw) ((ndbl+3)^2 / (4*n2double))
   case key > 1 of
     True -> do
       case n == 2 of
@@ -186,7 +186,7 @@ smprms n key = do
           p = a*((fromInt p1)/(fromInt p2) - a)
           q = a*(2*a*a - (fromInt p1)/(fromInt p3)) + (fromInt p0)/(fromInt p3)
           th = acos(-q/(2*(sqrt(-p*p*p))))/3
-          r = 2*sqrt(-p*p*p)**(1/3)
+          r = 2*sqrt(-p) -- 2*sqrt(-p*p*p)**(1/3)
           tp = 2*pi/3
           a1 = -a + r*(cos(th))
           a2 = -a + r*(cos(th+2*tp))
@@ -247,39 +247,76 @@ smprms n key = do
           writeArray w (12,iw-6) ((ndbl+9)^9/(fromInt $ 256*n8*(n+9)))
         False -> return ()
     False -> return ()
-  rowsIO <- mapM (extractRow w) [2..wts]
+--   rowsIO <- mapM (extractRow w) [2..wts]
+--   rows <- mapM array1dToUVectorD rowsIO
+--   --let cols = map (\j -> fromList $ map (\i -> rows!!(i-2) UV.!(j-1)) [2..wts]) [1..rls]
+--   let cols = transpose rows
+--   ptsU <- (=<<) (return.(UV.map fromInt)) (UV.freeze pts)
+--   let row1 = map (\j -> 1 - UV.foldr (+) 0 (UV.zipWith (*) (UV.tail ptsU) (cols!!(j-1)))) [1..rls]
+-- --  let wmat = fromLists (row1 : (map toList rows))
+--       wcols = map (\j -> UV.cons (row1!!j) (cols!!j)) [0..(rls-1)]
+--       col1 = head wcols
+--       wcols2 = col1 : (map (\col -> UV.zipWith (-) col col1) (tail wcols))
+--       col2 = wcols2 !! 1
+--       nb = UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) col1))
+--       ratio = nb / (UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) col2)))
+--       wcol2 = UV.map (*(sqrt ratio)) col2
+--       wcols3 = col1 : (wcol2 : ((tail.tail) wcols2))
+--       -- goal : foldr updateW wcols3 [3..rls]
+--   let updateW :: [UVectorD] -> Int -> [UVectorD]
+--       updateW cols k = [cols!!j | j <- [0..(k-2)]] ++ [wknew] ++ [cols!!j | j <- [k..(rls-1)]]
+--          where
+--           ptsW = UV.map (/nb) (UV.zipWith (*) ptsU (cols!!(k-1)))
+--           slice = [cols!!j | j <- [1..(k-2)]]
+--           prod1 = fromList $ map ((UV.foldr (+) 0).(UV.zipWith (*) ptsW)) slice
+--           --rows = map (\i -> fromList $ map (\j -> slice!!(j-1) UV.!(i-1)) [1..(k-2)]) [1..wts]
+--           rows = transpose slice
+--           prod2 = fromList $ map ((UV.foldr (+) 0).(UV.zipWith (*) prod1)) rows
+--           wk = UV.zipWith (-) (cols!!(k-1)) prod2
+--           ratio = nb / (UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) wk)))
+--           wknew = UV.map (*(sqrt ratio)) wk
+--       wcolsnew = foldl updateW wcols3 [3..rls]
+  rowsIO <- mapM (extractRow w) (S.fromList [2..wts])
   rows <- mapM array1dToUVectorD rowsIO
-  --let cols = map (\j -> fromList $ map (\i -> rows!!(i-2) UV.!(j-1)) [2..wts]) [1..rls]
   let cols = transpose rows
   ptsU <- (=<<) (return.(UV.map fromInt)) (UV.freeze pts)
-  let row1 = map (\j -> 1 - UV.foldr (+) 0 (UV.zipWith (*) (UV.tail ptsU) (cols!!(j-1)))) [1..rls]
---  let wmat = fromLists (row1 : (map toList rows))
-      wcols = map (\j -> UV.cons (row1!!j) (cols!!j)) [0..(rls-1)]
-      wcols2 = head wcols : (map (\col -> UV.zipWith (-) col (head wcols)) (tail wcols))
-      nb = UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) (head wcols)))
-      ratio = nb / (UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) (wcols2!!1))))
-      wcol2 = UV.map (*(sqrt ratio)) (wcols2!!1)
-      wcols3 = (head wcols) : (wcol2 : ((tail.tail) wcols2))
-      -- goal : foldr updateW wcols3 [3..rls]
-  let updateW :: [UVectorD] -> Int -> [UVectorD]
-      updateW cols k = [cols!!j | j <- [0..(k-2)]] ++ [wknew] ++ [cols!!j | j <- [k..(rls-1)]]
-                       where
-                        ptsW = UV.map (/nb) (UV.zipWith (*) ptsU (cols!!(k-1)))
-                        slice = [cols!!j | j <- [1..(k-2)]]
-                        prod1 = fromList $ map ((UV.foldr (+) 0).(UV.zipWith (*) ptsW)) slice
-                        --rows = map (\i -> fromList $ map (\j -> slice!!(j-1) UV.!(i-1)) [1..(k-2)]) [1..wts]
-                        rows = transpose slice
-                        prod2 = fromList $ map ((UV.foldr (+) 0).(UV.zipWith (*) prod1)) rows
-                        wk = UV.zipWith (-) (cols!!(k-1)) prod2
-                        ratio = nb / (UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) wk)))
-                        wknew = UV.map (*(sqrt ratio)) wk
+  let row1 = fmap (\col -> 1 - UV.foldr (+) 0
+                           (UV.zipWith (*) (UV.tail ptsU) col))
+                  (S.take rls cols)
+      wcols = fmap (\j -> UV.cons (index row1 j) (index cols j))
+                   (S.fromList [0..(rls-1)])
+      col1 = index wcols 0
+      wcols2 = (S.<|) col1
+                      (fmap (\col -> UV.zipWith (-) col col1) (S.drop 1 wcols))
+      col2 = index wcols2 1
+      nb = UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) col1))
+      ratio = nb / (UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) col2)))
+      wcol2 = UV.map (*(sqrt ratio)) col2
+      wcols3 = (S.<|) col1 ((S.<|) wcol2 (S.drop 2 wcols2))
+  let updateW :: Seq UVectorD -> Int -> Seq UVectorD
+      updateW cols k = update (k-1) wknew cols
+         where
+          ptsW = UV.map (/nb) (UV.zipWith (*) ptsU (index cols (k-1)))
+          slice = S.drop 1 (S.take (k-1) cols)
+          prod1 = (fromList.(DF.toList)) $ -- ou alors pas de vecteurs
+                  fmap ((UV.foldr (+) 0).(UV.zipWith (*) ptsW)) slice
+          rows = transpose slice
+          prod2 = (fromList.(DF.toList)) $
+                  fmap ((UV.foldr (+) 0).(UV.zipWith (*) prod1)) rows
+          wk = UV.zipWith (-) (index cols (k-1)) prod2
+          ratio = nb / (UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) wk)))
+          wknew = UV.map (*(sqrt ratio)) wk
       wcolsnew = foldl updateW wcols3 [3..rls]
   return (g, transpose wcolsnew, pts)
 
-transpose :: [UVectorD] -> [UVectorD]
+-- transpose :: [UVectorD] -> [UVectorD]
+-- transpose cols =
+--   map (\i -> fromList $ map (\j -> cols!!j UV.!i)
+--       [0..(length cols - 1)]) [0..(UV.length (head cols) - 1)]
+transpose :: Seq UVectorD -> Seq UVectorD
 transpose cols =
-  map (\i -> fromList $ map (\j -> cols!!j UV.!i)
-      [0..(length cols - 1)]) [0..(UV.length (head cols) - 1)]
+  fmap (\i -> (fromList.(DF.toList)) $ fmap (\col -> col UV.!i) cols)
+       (S.fromList ([0..(UV.length (index cols 0) - 1)]))
 
 matprod :: IOMatrix -> [Double] -> IO UVectorD
 matprod mat x = do
@@ -364,19 +401,19 @@ sumMatrices matrices = do
   step 1 1
 
 smprul :: IOMatrix -> Int -> (UVectorD -> UVectorD) -> Double -> IOMatrix
-       -> [UVectorD] -> UVectorI -> IO (IO1dArray, IO1dArray)
+       -> Seq UVectorD -> UVectorI -> IO (IO1dArray, IO1dArray)
 smprul vrts nf f vol g w pts = do
   let rtmn = 0.1
       small = 1e-12
       errcof = 8
   --(_, (_,rls)) <- getBounds w
-      rls = UV.length (head w)
+      rls = UV.length (index w 0)
       ptsPositive = toList $ UV.map (+1) $ UV.findIndices (> 0) pts
   toSum <- mapM (\k -> do
                          g_colk <- extractColumn g k
 --                         w_rowk <- extractRow w k
                          sms <- smpsms vrts nf f g_colk vol
-                         outerProduct2 sms (w!!(k-1)))
+                         outerProduct2 sms (index w (k-1)))
                 ptsPositive
   rule <- sumMatrices toSum -- quid si la liste est vide ?
   basval <- extractColumn rule 1
@@ -417,7 +454,7 @@ testsmprul = do
       f v = let list = toList v in fromList [sum list, product list]
   let vol = 2.0
   g <- newListArray ((1,1),(nd+1,3)) [1,2,3,4,5,6,7,8,9,10,11,12] :: IO IOMatrix
-  let w = [fromList [1,2,3], fromList [4,5,6], fromList [7,8,9]] :: [UVectorD]
+  let w = S.fromList [fromList [1,2,3], fromList [4,5,6], fromList [7,8,9]] :: Seq UVectorD
   let pts = fromList [1,2,3] :: UVectorI
   -- gcol <- extractColumn g 1
   -- sms <- smpsms vrts nf f gcol 1
@@ -705,85 +742,79 @@ adsimp nd nf mxfs f ea er key vrts info = do
       let b = smpchc nd key
       smpsad nd nf f mxfs ea er key b sbs vrts info
 
-smpsad_old :: Int -> Int -> (UVectorD -> UVectorD) -> Int -> Double -> Double -> Int
-       -> Int -> Int -> IO3dArray -> Bool -> IO (UVectorD, UVectorD, Int, Bool)
-smpsad_old nd nf f mxfs ea er key rcls sbs vrts info = do
-  let dfcost = 1 + 2*nd*(nd+1)
-  -- vl <- newArray (1,nf) 0 :: IO IO1dArray
-  -- ae <- newArray (1,nf) 0 :: IO IO1dArray
-  (g, w, ptsIO) <- smprms nd key
-  pts <- freeze ptsIO
-  -- let fct = fromInt (product [1..nd]) -- je m'en sers ?
-  -- vls <- newArray_ ((1,1),(nf,sbs)) :: IO IOMatrix
-  -- aes <- newArray_ ((1,1),(nf,sbs)) :: IO IOMatrix
-  simplices <- mapM (toSimplex vrts (nd+1)) [1..sbs]
-  let vol = S.fromList $ map simplexVolume simplices
-      nv = sbs*rcls
-  matrices <- mapM
-              (\k -> mapIndices ((1,1),(nd,nd+1)) (\(i,j) -> (i,j,k)) vrts)
-              [1..sbs]
-  (basvals, rgnerrs) <- (=<<) (return.unzip)
-                        (mapM (\k ->
-                                smprul (matrices!!k) nf f (index vol k) g w pts)
-                        [0..(sbs-1)])
-  -- aes <- matrixFromColumns rgnerrs
-  -- vls <- matrixFromColumns basvals
-  rgnerrs' <- mapM array1dToUVectorD rgnerrs
-  basvals' <- mapM array1dToUVectorD basvals
-  let vl = foldl1 (UV.zipWith (+)) basvals'
-      ae = foldl1 (UV.zipWith (+)) rgnerrs'
-      aes = V.fromListN sbs rgnerrs'
-      vls = V.fromListN sbs basvals'
-  let fl = UV.any (> (max ea (UV.maximum (UV.map ((*er).abs) vl)))) ae
-  -- let loop :: Params -> IO (UVectorD, UVectorD, Int, Bool)
-  --     loop params | not fl || (nv+dfcost+4*rcls > mxfs) = return (vl, ae, nv, fl)
-  let loop :: Params -> IO (UVectorD, UVectorD, Int, Bool)
-      loop params | not fl || (nv+dfcost+4*rcls > mxfs) = return (vl, ae, nv, fl) --(rowSumsV vls, rowSumsV aes, nv, fl)
-                  | otherwise = do
-                    let maxs = V.map (UV.maximum) aes
-                        id = fromJust $ V.findIndex (== V.maximum maxs) maxs
-                        vl0 = UV.zipWith (-) vl (vls V.! id)
-                        ae0 = UV.zipWith (-) ae (aes V.! id)
-                    (nregions, vrts2) <- smpdfs nd nf f (id+1) sbs vrts
-                    let vi = (index vol id)/(fromInt nregions)
-                        nv2 = nv + (nregions-1)*rcls -- nregions*rcls ?
-                        sbs2 = sbs + (nregions-1)
-                    matrices <- mapM
-                                (\k -> mapIndices ((1,1),(nd,nd+1)) (\(i,j) -> (i,j,k)) vrts2)
-                                ((id+1):[(sbs+1)..(sbs+nregions-1)])
-                    (basvals, rgnerrs) <- (=<<) (return.unzip)
-                                          (mapM (\m ->
-                                                  smprul m nf f vi g w pts)
-                                          matrices)
-                    -- TODO améliorer cette fonction - on a besoin que des rowSums
-                    -- changer vol dans smprul n'est qu'un facteur je pense
-                    -- je pense que vl et ae sont ok, et pas besoin de aes vls
-                    -- sauf aes pour les max => garder juste les max ?
-                    -- oui c'est bon !
-                    -- reste just à améliorer vol2
-                    -- est-ce qu'un vol mutable serait le plus efficace ?
-                    -- peut-être bof pour faire ++ replicate
-                    rgnerrs' <- mapM array1dToUVectorD rgnerrs
-                    basvals' <- mapM array1dToUVectorD basvals
-                    let vl2 = UV.zipWith (+) vl0 (foldl1 (UV.zipWith (+)) basvals')
-                        ae2 = UV.zipWith (+) ae0 (foldl1 (UV.zipWith (+)) rgnerrs')
-                        aes2 = (aes V.// [(id, head rgnerrs')]) V.++ (V.tail (V.fromList rgnerrs')) -- fromListN (nregions-1)
-                        vls2 = (vls V.// [(id, head basvals')]) V.++ (V.tail (V.fromList basvals'))
-                        fl2 = UV.any (> (max ea (UV.maximum (UV.map ((*er).abs) vl2)))) ae2
-                        vol2 = (update id vi vol) >< (S.replicate (nregions-1) vi)
-                        -- vol2_temp = vol ++ (replicate (nregions-1) vi)
-                        -- vol2 = map (\i -> if (i == id) then vi else (vol2_temp!!i)) [0..(length vol2_temp - 1)]
-                    loop (fl2, nv2, sbs2, aes2, vls2, ae2, vl2, vrts2, vol2)
-                  where
-                    (fl, nv, sbs, aes, vls, ae, vl, vrts, vol) = params
-  -- dans le code R il fait rowSums mais ça me semble inutile
-  loop (fl, nv, sbs, aes, vls, ae, vl, vrts, vol)
-
-type Params =
-  (Bool, Int, Int, V.Vector UVectorD, V.Vector UVectorD, UVectorD, UVectorD, IO3dArray, Seq Double)
+-- smpsad_old :: Int -> Int -> (UVectorD -> UVectorD) -> Int -> Double -> Double -> Int
+--        -> Int -> Int -> IO3dArray -> Bool -> IO (UVectorD, UVectorD, Int, Bool)
+-- smpsad_old nd nf f mxfs ea er key rcls sbs vrts info = do
+--   let dfcost = 1 + 2*nd*(nd+1)
+--   -- vl <- newArray (1,nf) 0 :: IO IO1dArray
+--   -- ae <- newArray (1,nf) 0 :: IO IO1dArray
+--   (g, w, ptsIO) <- smprms nd key
+--   pts <- freeze ptsIO
+--   -- let fct = fromInt (product [1..nd]) -- je m'en sers ?
+--   -- vls <- newArray_ ((1,1),(nf,sbs)) :: IO IOMatrix
+--   -- aes <- newArray_ ((1,1),(nf,sbs)) :: IO IOMatrix
+--   simplices <- mapM (toSimplex vrts (nd+1)) [1..sbs]
+--   let vol = S.fromList $ map simplexVolume simplices
+--       nv = sbs*rcls
+--   matrices <- mapM
+--               (\k -> mapIndices ((1,1),(nd,nd+1)) (\(i,j) -> (i,j,k)) vrts)
+--               [1..sbs]
+--   (basvals, rgnerrs) <- (=<<) (return.unzip)
+--                         (mapM (\k ->
+--                                 smprul (matrices!!k) nf f (index vol k) g w pts)
+--                         [0..(sbs-1)])
+--   -- aes <- matrixFromColumns rgnerrs
+--   -- vls <- matrixFromColumns basvals
+--   rgnerrs' <- mapM array1dToUVectorD rgnerrs
+--   basvals' <- mapM array1dToUVectorD basvals
+--   let vl = foldl1 (UV.zipWith (+)) basvals'
+--       ae = foldl1 (UV.zipWith (+)) rgnerrs'
+--       aes = V.fromListN sbs rgnerrs'
+--       vls = V.fromListN sbs basvals'
+--   let fl = UV.any (> (max ea (UV.maximum (UV.map ((*er).abs) vl)))) ae
+--   -- let loop :: Params -> IO (UVectorD, UVectorD, Int, Bool)
+--   --     loop params | not fl || (nv+dfcost+4*rcls > mxfs) = return (vl, ae, nv, fl)
+--   let loop :: Params0 -> IO (UVectorD, UVectorD, Int, Bool)
+--       loop params | not fl || (nv+dfcost+4*rcls > mxfs) = return (vl, ae, nv, fl) --(rowSumsV vls, rowSumsV aes, nv, fl)
+--                   | otherwise = do
+--                     let maxs = V.map (UV.maximum) aes
+--                         id = fromJust $ V.findIndex (== V.maximum maxs) maxs
+--                         vl0 = UV.zipWith (-) vl (vls V.! id)
+--                         ae0 = UV.zipWith (-) ae (aes V.! id)
+--                     (nregions, vrts2) <- smpdfs nd nf f (id+1) sbs vrts
+--                     let vi = (index vol id)/(fromInt nregions)
+--                         nv2 = nv + (nregions-1)*rcls -- nregions*rcls ?
+--                         sbs2 = sbs + (nregions-1)
+--                     matrices <- mapM
+--                                 (\k -> mapIndices ((1,1),(nd,nd+1)) (\(i,j) -> (i,j,k)) vrts2)
+--                                 ((id+1):[(sbs+1)..(sbs+nregions-1)])
+--                     (basvals, rgnerrs) <- (=<<) (return.unzip)
+--                                           (mapM (\m ->
+--                                                   smprul m nf f vi g w pts)
+--                                           matrices)
+--                     -- TODO améliorer cette fonction - on a besoin que des rowSums
+--                     -- changer vol dans smprul n'est qu'un facteur je pense
+--                     rgnerrs' <- mapM array1dToUVectorD rgnerrs
+--                     basvals' <- mapM array1dToUVectorD basvals
+--                     let vl2 = UV.zipWith (+) vl0 (foldl1 (UV.zipWith (+)) basvals')
+--                         ae2 = UV.zipWith (+) ae0 (foldl1 (UV.zipWith (+)) rgnerrs')
+--                         aes2 = (aes V.// [(id, head rgnerrs')]) V.++ (V.tail (V.fromList rgnerrs')) -- fromListN (nregions-1)
+--                         vls2 = (vls V.// [(id, head basvals')]) V.++ (V.tail (V.fromList basvals'))
+--                         fl2 = UV.any (> (max ea (UV.maximum (UV.map ((*er).abs) vl2)))) ae2
+--                         vol2 = (update id vi vol) >< (S.replicate (nregions-1) vi)
+--                         -- vol2_temp = vol ++ (replicate (nregions-1) vi)
+--                         -- vol2 = map (\i -> if (i == id) then vi else (vol2_temp!!i)) [0..(length vol2_temp - 1)]
+--                     loop (fl2, nv2, sbs2, aes2, vls2, ae2, vl2, vrts2, vol2)
+--                   where
+--                     (fl, nv, sbs, aes, vls, ae, vl, vrts, vol) = params
+--   -- dans le code R il fait rowSums mais ça me semble inutile
+--   loop (fl, nv, sbs, aes, vls, ae, vl, vrts, vol)
 --
-type Params2 =
-  (Bool, Int, Int, Seq UVectorD, Seq UVectorD, UVectorD, UVectorD, IO3dArray, Seq Double)
+-- type Params0 =
+--   (Bool, Int, Int, V.Vector UVectorD, V.Vector UVectorD, UVectorD, UVectorD, IO3dArray, Seq Double)
+--
+type Params = (Bool, Int, Int, Seq UVectorD, Seq UVectorD,
+               UVectorD, UVectorD, IO3dArray, Seq Double)
 
 smpsad :: Int -> Int -> (UVectorD -> UVectorD) -> Int -> Double -> Double -> Int
        -> Int -> Int -> IO3dArray -> Bool -> IO (UVectorD, UVectorD, Int, Bool)
@@ -799,17 +830,14 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
               (S.fromList [1..sbs])
   -- br <- (mapM (\k -> smprul (index matrices k) nf f (index vol k) g w pts)
   --                       (S.fromList [0..(sbs-1)])) --
-  br <- mapM (\(m,v) -> smprul m nf f v g w pts)
-                        (S.zip matrices vol) --
-  rgnerrs' <- mapM (array1dToUVectorD.snd) br
-  basvals' <- mapM (array1dToUVectorD.fst) br
-  let vl = foldl1 (UV.zipWith (+)) basvals'
-      ae = foldl1 (UV.zipWith (+)) rgnerrs'
-      aes = rgnerrs' -- V.fromList (DF.toList rgnerrs')
-      vls = basvals' -- V.fromList (DF.toList basvals')
+  br <- mapM (\(m,v) -> smprul m nf f v g w pts) (S.zip matrices vol)
+  aes <- mapM (array1dToUVectorD.snd) br
+  vls <- mapM (array1dToUVectorD.fst) br
+  let vl = foldl1 (UV.zipWith (+)) vls
+      ae = foldl1 (UV.zipWith (+)) aes
   let fl = UV.any (> (max ea (UV.maximum (UV.map ((*er).abs) vl)))) ae
-  let loop :: Params2 -> IO (UVectorD, UVectorD, Int, Bool)
-      loop params | not fl || (nv+dfcost+4*rcls > mxfs) = return (vl, ae, nv, fl) --(rowSumsV vls, rowSumsV aes, nv, fl)
+  let loop :: Params -> IO (UVectorD, UVectorD, Int, Bool)
+      loop params | not fl || nv+dfcost+4*rcls > mxfs = return (vl, ae, nv, fl)
                   | otherwise = do
                     let maxs = fmap UV.maximum aes
                         id = fromJust $ S.findIndexL (== maximum maxs) maxs
@@ -818,36 +846,43 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
                     (nregions, vrts2) <- smpdfs nd nf f (id+1) sbs vrts
                     let vi = (index vol id)/(fromInt nregions)
                         nv2 = nv + (nregions-1)*rcls -- nregions*rcls ?
-                        sbs2 = sbs + (nregions-1)
+                        sbs2 = sbs + nregions-1
                     matrices <- mapM
-                                (\k -> mapIndices ((1,1),(nd,nd+1)) (\(i,j) -> (i,j,k)) vrts2)
-                                (S.fromList ((id+1):[(sbs+1)..(sbs+nregions-1)]))
-                    br <- (mapM (\m -> smprul m nf f vi g w pts)
-                                          matrices)
+                                (\k -> mapIndices ((1,1),(nd,nd+1))
+                                       (\(i,j) -> (i,j,k)) vrts2)
+                                (S.fromList ((id+1):[(sbs+1)..sbs2]))
+                    br <- mapM (\m -> smprul m nf f vi g w pts) matrices
                     rgnerrs' <- mapM (array1dToUVectorD.snd) br
                     basvals' <- mapM (array1dToUVectorD.fst) br
-                    let vl2 = UV.zipWith (+) vl0 (foldl1 (UV.zipWith (+)) basvals')
-                        ae2 = UV.zipWith (+) ae0 (foldl1 (UV.zipWith (+)) rgnerrs')
-                        aes2 = (update id (index rgnerrs' 0) aes) >< (S.drop 1 rgnerrs')
-                        vls2 = (update id (index basvals' 0) vls) >< (S.drop 1 basvals')
-                        fl2 = UV.any (> (max ea (UV.maximum (UV.map ((*er).abs) vl2)))) ae2
-                        vol2 = (update id vi vol) >< (S.replicate (nregions-1) vi)
+                    let vl2 = UV.zipWith (+) vl0
+                                             (foldl1 (UV.zipWith (+)) basvals')
+                        ae2 = UV.zipWith (+) ae0
+                                             (foldl1 (UV.zipWith (+)) rgnerrs')
+                        aes2 = (update id (index rgnerrs' 0) aes)
+                               >< (S.drop 1 rgnerrs')
+                        vls2 = (update id (index basvals' 0) vls)
+                               >< (S.drop 1 basvals')
+                        fl2 = UV.any
+                              (> (max ea (UV.maximum (UV.map ((*er).abs) vl2))))
+                              ae2
+                        vol2 = (update id vi vol)
+                               >< (S.replicate (nregions-1) vi)
                     loop (fl2, nv2, sbs2, aes2, vls2, ae2, vl2, vrts2, vol2)
                   where
                     (fl, nv, sbs, aes, vls, ae, vl, vrts, vol) = params
   -- dans le code R il fait rowSums mais ça me semble inutile
   loop (fl, nv, sbs, aes, vls, ae, vl, vrts, vol)
 
-rowSumsV :: V.Vector UVectorD -> UVectorD
+rowSumsV :: V.Vector UVectorD -> UVectorD -- pas utilisé
 rowSumsV = V.foldl1 (UV.zipWith (+))
 
-matrixFromColumns :: [IO1dArray] -> IO UMatrix
+matrixFromColumns :: [IO1dArray] -> IO UMatrix -- pas utilisé
 matrixFromColumns columns = do
   (_,nrow) <- getBounds (head columns)
   let ncol = length columns
   u1darrays <- mapM IOA.freeze columns :: IO [UArray Int Double]
   let assocs = map UA.assocs u1darrays
-  let assocs' = map (\k -> map (\(i,e) -> ((k,i),e)) (assocs !! (k-1))) [1..ncol]
+  let assocs' = map (\k -> map (\(i,e) -> ((k,i),e)) (assocs!!(k-1))) [1..ncol]
   return $ UA.array ((1,1),(nrow,ncol)) (concat assocs')
 
 

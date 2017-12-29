@@ -3,6 +3,7 @@ module Cubature
 import Internal
 import Simplex
 import qualified Data.Vector.Unboxed         as UV
+import Numeric (expm1)
 
 integrateOnSimplex
     :: (UVectorD -> UVectorD) -- integrand
@@ -39,7 +40,7 @@ example' rule = integrateOnSimplex fExample' [canonicalSimplex 3] 2 10000 0 1e-5
 -- ([0.125,4.9999999999999996e-2],[1.25e-13,0.4048388923847347],9,True)
 -- => instabilité numérique ?
 fExample2 :: UVectorD -> UVectorD
-fExample2 v = UV.singleton $ sqrt((x!!3-x!!2)/(x!!1-x!!0))*exp(-(x!!1-x!!0))
+fExample2 v = UV.singleton $ sqrt((x!!3-x!!2)/(x!!1-x!!0))*(1+expm1(-(x!!1-x!!0)))
   where y = UV.toList v
         x = map (\i -> sum $ take i y) [1..4]
 
