@@ -30,6 +30,8 @@ library
                      , Cubature
                      , Internal2
                      , Cubature2
+                     , Cubature3
+                     , Internal3
   build-depends:       base >= 4.7 && < 5
                      , combinat
                      , array

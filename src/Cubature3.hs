@@ -1,8 +1,18 @@
-module Cubature2
+module Cubature3
   where
-import Internal2
+import Internal3
 import Simplex
 import qualified Data.Vector.Unboxed         as UV
+import Control.Monad.ST
+import Data.Array.Unboxed
+
+simplicesToArray3 :: Simplices -> ST s (UArray (Int,Int,Int) Double) -- U3dArray
+simplicesToArray3 simplices = do
+  let dim = length (head (head simplices))
+      nsimplices = length simplices
+      assocList = map (\[i,j,k] -> ((i,j,k), (simplices!!(k-1))!!(j-1)!!(i-1)))
+                      (sequence [[1..dim], [1..(dim+1)], [1..nsimplices]])
+  return $ array ((1,1,1),(dim,dim+1,nsimplices)) assocList
 
 integrateOnSimplex
     :: (UVectorD -> UVectorD) -- integrand
@@ -12,10 +22,10 @@ integrateOnSimplex
     -> Double                 -- desired absolute error
     -> Double                 -- desired relative error
     -> Int                    -- integration rule: 1, 2, 3 or 4
-    -> IO ([Double], [Double], Int, Bool) -- integral, error, nevals, code
+    -> ST s ([Double], [Double], Int, Bool) -- integral, error, nevals, code
 integrateOnSimplex f s ncomp maxevals absError relError rule = do
   let n = length (head s) - 1
-  v <- simplicesToArray2 s
+  v <- simplicesToArray3 s
   (vals, errors, nevals, fl) <-
     adsimp n ncomp maxevals f absError relError rule v False
   return (UV.toList vals, UV.toList errors, nevals, fl)

@@ -38,6 +38,7 @@ simplicesToArray2 simplices = do
       assocList = map (\[i,j,k] -> ((i,j,k), (simplices!!(k-1))!!(j-1)!!(i-1)))
                       (sequence [[1..dim], [1..(dim+1)], [1..nsimplices]])
   return $ array ((1,1,1),(dim,dim+1,nsimplices)) assocList
+--
 
 canonicalSimplex :: Int -> Simplex
 canonicalSimplex dim =
