@@ -11,7 +11,7 @@ import qualified Data.Array.IO               as IOA
 --import qualified Data.Array.MArray           as MA
 -- import qualified Data.Array                  as A
 --import qualified Data.Array.IArray           as IA
-import           Control.Monad               ((=<<))
+import           Control.Monad               ((=<<), (<$!>))
 import           Data.Array.Unboxed          (UArray)
 import qualified Data.Array.Unboxed          as UA
 import qualified Data.Foldable               as DF
@@ -239,9 +239,15 @@ smprms n key = do
         False -> return [()]
       unsafeWrite pts 10 (div (np*n*(n-1)) 2)
       writeArray w (2,iw-6) (- (ndbl+3)^9/(fromInt $ 6*256*n6))
-      _ <- mapM (\i -> writeArray w (i,iw-6) ((ndbl+5)^9/(fromInt $ 512*n6*(n+7)))) [3,4]
-      _ <- mapM (\i -> writeArray w (i,iw-6) (-(ndbl+7)^9/(fromInt $ 256*n8))) [5,6,7]
-      _ <- mapM (\i -> writeArray w (i,iw-6) ((ndbl+9)^9/(fromInt $ 256*n8*(n+9)))) [8..11]
+      _ <- mapM (\i -> writeArray w (i,iw-6)
+                                  ((ndbl+5)^9/(fromInt $ 512*n6*(n+7))))
+                [3,4]
+      _ <- mapM (\i -> writeArray w (i,iw-6)
+                                  (-(ndbl+7)^9/(fromInt $ 256*n8)))
+                [5,6,7]
+      _ <- mapM (\i -> writeArray w (i,iw-6)
+                                  ((ndbl+9)^9/(fromInt $ 256*n8*(n+9))))
+                [8..11]
       case n > 2 of
         True ->  do
           mapM (\i -> writeArray g (i,12) (3/(ndbl+9))) [1..4]
@@ -313,6 +319,22 @@ smprms n key = do
           wknew = UV.map (*(sqrt ratio)) wk
       wcolsnew = foldl updateW wcols3 [3..rls]
   return (g, transpose wcolsnew, pts_out)
+
+-- --
+-- seqToVector :: Seq Int -> IO UVectorI
+-- seqToVector seq = do
+--   let n = S.length seq
+--   out <- new n :: IO IOVectorI
+--   let loop :: Int -> IO ()
+--       loop i | i == n = return ()
+--              | otherwise = do
+--                unsafeWrite out i (index seq i)
+--                loop (i+1)
+--   loop 0
+--   UV.unsafeFreeze out
+--
+-- seqToVector2 :: Seq Int -> UVectorI
+-- seqToVector2 = fromList.(DF.toList)
 
 -- transpose :: [UVectorD] -> [UVectorD]
 -- transpose cols =
@@ -408,14 +430,24 @@ sumMatrices :: [IOMatrix] -> IO IOMatrix
 sumMatrices matrices = do
   (_, (n1,n2)) <- getBounds (head matrices)
   out <- newArray_ ((1,1),(n1,n2)) :: IO IOMatrix
-  let step :: Int -> Int -> IO IOMatrix
-      step i j | i == n1 && j == n2+1 = return out
-               | j == n2+1 = step (i+1) 1 -- avec un inner tu gagnerais un test
-               | otherwise = do
-                 coefs <- mapM (\m -> readArray m (i,j)) matrices
-                 writeArray out (i,j) (sum coefs)
-                 step i (j+1)
-  step 1 1
+  let step :: Int -> IO IOMatrix
+      step i | i == n1+1 = return out
+             | otherwise = inner 1
+               where
+                 inner :: Int -> IO IOMatrix
+                 inner j | j == n2+1 = step (i+1)
+                         | otherwise = do
+                           coefs <- mapM (\m -> readArray m (i,j)) matrices
+                           writeArray out (i,j) (sum coefs)
+                           inner (j+1)
+  -- let step :: Int -> Int -> IO IOMatrix
+  --     step i j | i == n1 && j == n2+1 = return out
+  --              | j == n2+1 = step (i+1) 1 -- avec un inner tu gagnerais un test
+  --              | otherwise = do
+  --                coefs <- mapM (\m -> readArray m (i,j)) matrices
+  --                writeArray out (i,j) (sum coefs)
+  --                step i (j+1)
+  step 1
 
 smprul :: IOMatrix -> Int -> (UVectorD -> UVectorD) -> Double -> IOMatrix
        -> Seq UVectorD -> UVectorI -> IO (IO1dArray, IO1dArray)
@@ -457,7 +489,8 @@ smprul vrts nf f vol g w pts = do
                                   rgnerr_i <- readArray rgnerr i
                                   writeArray rgnerr i (max nmrl rgnerr_i)
                                   case nmrl > small*y && k < rls of
-                                    True -> innerstep (k-2) (max (nmrl/y) x) nmrl
+                                    True -> innerstep (k-2) (max (nmrl/y) x)
+                                                      nmrl
                                     False -> innerstep (k-2) x nmrl
   step 1
   return (basval, rgnerr)
@@ -482,53 +515,53 @@ testsmprul = do
   rgnerrList <- getElems rgnerr
   return (basvalList, rgnerrList)
 
-rowSums :: IOMatrix -> IO UVectorD
-rowSums m = do
+rowMeans :: IOMatrix -> IO UVectorD
+rowMeans m = do
   (_, (nrow,ncol)) <- getBounds m
-  rowSumsIO <- new nrow :: IO IOVectorD
+  outIO <- new nrow :: IO IOVectorD
   let step :: Int -> IO ()
       step i | i == nrow+1 = return ()
              | otherwise = do
                 !sum_i <- inner 1 0
-                unsafeWrite rowSumsIO (i-1) sum_i
+                unsafeWrite outIO (i-1) sum_i
                 step (i+1)
               where
                 inner :: Int -> Double -> IO Double
-                inner j !x | j == ncol+1 = return x
+                inner j !x | j == ncol+1 = return (x / (fromInt ncol))
                            | otherwise = do
                              coef <- readArray m (i,j)
                              inner (j+1) (x + coef)
   step 1
-  unsafeFreeze rowSumsIO
+  unsafeFreeze outIO
 
-rowMeans :: IOMatrix -> IO UVectorD
-rowMeans m = do
-  (_, (_,ncol)) <- getBounds m
-  rowsums <- rowSums m
-  return $ UV.map (/(fromInt ncol)) rowsums
+-- rowMeans :: IOMatrix -> IO UVectorD
+-- rowMeans m = do
+--   (_, (_,ncol)) <- getBounds m
+--   rowsums <- rowSums m
+--   return $ UV.map (/(fromInt ncol)) rowsums
 
 testrowMeans :: IO UVectorD
 testrowMeans = do
   m <- newListArray ((1,1),(2,3)) [1,2,3,4,5,6] :: IO IOMatrix
   rowMeans m
 
--- array1dToUVectorD :: IO1dArray -> IO UVectorD
--- array1dToUVectorD array = do
---   (=<<) (return . fromList) (getElems array)
 array1dToUVectorD :: IO1dArray -> IO UVectorD
 array1dToUVectorD array = do
-  (_,n) <- getBounds array
-  out <- new n :: IO IOVectorD
-  let loop :: Int -> IO ()
-      loop i | i == n+1 = return ()
-             | otherwise = do
-               coef <- readArray array i
-               unsafeWrite out (i-1) coef
-               loop (i+1)
-  loop 1
-  UV.unsafeFreeze out
---
-getVectors :: Int -> IO3dArray -> Int -> Int -> Int -> IO (UVectorD, UVectorD)
+  (<$!>) fromList (getElems array)
+-- array1dToUVectorD :: IO1dArray -> IO UVectorD
+-- array1dToUVectorD array = do
+--   (_,n) <- getBounds array
+--   out <- new n :: IO IOVectorD
+--   let loop :: Int -> IO ()
+--       loop i | i == n+1 = return ()
+--              | otherwise = do
+--                coef <- readArray array i
+--                unsafeWrite out (i-1) coef
+--                loop (i+1)
+--   loop 1
+--   UV.unsafeFreeze out
+
+getVectors :: Int -> IO3dArray -> Int -> Int -> Int -> IO (UVectorD, UVectorD) -- pas de gain
 getVectors n m k j1 j2 = do
   out1 <- new n :: IO IOVectorD
   out2 <- new n :: IO IOVectorD
@@ -573,45 +606,45 @@ smpdfs nd nf f top sbs vrts = do
                   inner :: Int -> Double -> IO Double
                   inner j !y | j == nd+2 = return y
                              | otherwise = do
-                               viIO <- extractColumn v i
-                               vjIO <- extractColumn v j
-                               vi <- array1dToUVectorD viIO
-                               vj <- array1dToUVectorD vjIO
-                               let h = UV.map (*(2/(5*(fromInt nd +1))))
-                                              (UV.zipWith (-) vi vj)
-                                   ewd = UV.foldr (+) 0 (UV.map abs h)
-                                   twoh = UV.map (*2) h
-                                   t1 = f (UV.zipWith (-) cn twoh)
-                                   t2 = f (UV.zipWith (+) cn twoh)
-                                   t3 = UV.map (*6) fc
-                                   t4 = f (UV.zipWith (-) cn h)
-                                   t5 = f (UV.zipWith (+) cn h)
-                                   t6 = UV.map (*(-4)) (UV.zipWith (+) t4 t5)
-                                   tsum = (foldl1 (UV.zipWith (+))) [t1,t2,t3,t6]
-                                   dfr1 = UV.foldr (+) 0 (UV.map abs tsum)
-                                   dfr2 = if dfmd+dfr1/8 == dfmd then 0 else dfr1
-                                   dfr3 = dfr2*ewd
-                               dfmx <- unsafeRead dfmxdfnx 0
-                               case dfr3 >= dfmx of
-                                 True -> do
-                                  is <- unsafeRead iejeitjtisjsls 4
-                                  js <- unsafeRead iejeitjtisjsls 5
-                                  unsafeWrite iejeitjtisjsls 2 is
-                                  unsafeWrite iejeitjtisjsls 3 js
-                                  unsafeWrite iejeitjtisjsls 4 i
-                                  unsafeWrite iejeitjtisjsls 5 j
-                                  unsafeWrite dfmxdfnx 1 dfmx
-                                  unsafeWrite dfmxdfnx 0 dfr3
-                                 False -> do
-                                  dfnx <- unsafeRead dfmxdfnx 1
-                                  case dfr3 >= dfnx of
-                                    True -> do
-                                      unsafeWrite iejeitjtisjsls 2 i
-                                      unsafeWrite iejeitjtisjsls 3 j
-                                      unsafeWrite dfmxdfnx 1 dfr3
-                                    False -> return ()
-                               writeArray frthdf (i,j) dfr3
-                               case ewd >= y of
+                              vi <- (=<<) array1dToUVectorD (extractColumn v i)
+                              vj <- (=<<) array1dToUVectorD (extractColumn v j)
+                              --  vi <- array1dToUVectorD viIO
+                              --  vj <- array1dToUVectorD vjIO
+                              let h = UV.map (*(2/(5*(fromInt nd +1))))
+                                             (UV.zipWith (-) vi vj)
+                                  ewd = UV.foldr (+) 0 (UV.map abs h)
+                                  twoh = UV.map (*2) h
+                                  t1 = f (UV.zipWith (-) cn twoh)
+                                  t2 = f (UV.zipWith (+) cn twoh)
+                                  t3 = UV.map (*6) fc
+                                  t4 = f (UV.zipWith (-) cn h)
+                                  t5 = f (UV.zipWith (+) cn h)
+                                  t6 = UV.map (*(-4)) (UV.zipWith (+) t4 t5)
+                                  tsum = foldl1 (UV.zipWith (+)) [t1,t2,t3,t6]
+                                  dfr1 = UV.foldr (+) 0 (UV.map abs tsum)
+                                  dfr2 = if dfmd+dfr1/8 == dfmd then 0 else dfr1
+                                  dfr3 = dfr2*ewd
+                              dfmx <- unsafeRead dfmxdfnx 0
+                              case dfr3 >= dfmx of
+                                True -> do
+                                 is <- unsafeRead iejeitjtisjsls 4
+                                 js <- unsafeRead iejeitjtisjsls 5
+                                 unsafeWrite iejeitjtisjsls 2 is
+                                 unsafeWrite iejeitjtisjsls 3 js
+                                 unsafeWrite iejeitjtisjsls 4 i
+                                 unsafeWrite iejeitjtisjsls 5 j
+                                 unsafeWrite dfmxdfnx 1 dfmx
+                                 unsafeWrite dfmxdfnx 0 dfr3
+                                False -> do
+                                 dfnx <- unsafeRead dfmxdfnx 1
+                                 case dfr3 >= dfnx of
+                                  True -> do
+                                    unsafeWrite iejeitjtisjsls 2 i
+                                    unsafeWrite iejeitjtisjsls 3 j
+                                    unsafeWrite dfmxdfnx 1 dfr3
+                                  False -> return ()
+                              writeArray frthdf (i,j) dfr3
+                              case ewd >= y of
                                 True -> do
                                   unsafeWrite iejeitjtisjsls 0 i
                                   unsafeWrite iejeitjtisjsls 1 j
@@ -896,7 +929,7 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
   vls <- mapM (array1dToUVectorD.fst) br
   let vl = foldl1 (UV.zipWith (+)) vls
       ae = foldl1 (UV.zipWith (+)) aes
-  let fl = UV.any (> (max ea (UV.maximum (UV.map ((*er).abs) vl)))) ae
+      fl = getFL ae vl -- UV.any (> (max ea (UV.maximum (UV.map ((*er).abs) vl)))) ae
   let loop :: Params -> IO (UVectorD, UVectorD, Int, Bool)
       loop !params | not fl || nv+dfcost+4*rcls > mxfs = return (vl, ae, nv, fl)
                    | otherwise = do
@@ -916,16 +949,14 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
                       rgnerrs' <- mapM (array1dToUVectorD.snd) br
                       basvals' <- mapM (array1dToUVectorD.fst) br
                       let vl2 = UV.zipWith (+) vl0
-                                               (foldl1 (UV.zipWith (+)) basvals')
+                                (foldl1 (UV.zipWith (+)) basvals')
                           ae2 = UV.zipWith (+) ae0
-                                               (foldl1 (UV.zipWith (+)) rgnerrs')
+                                (foldl1 (UV.zipWith (+)) rgnerrs')
                           aes2 = (update id (index rgnerrs' 0) aes)
                                  >< (S.drop 1 rgnerrs')
                           vls2 = (update id (index basvals' 0) vls)
                                  >< (S.drop 1 basvals')
-                          fl2 = UV.any
-                                (> (max ea (UV.maximum (UV.map ((*er).abs) vl2))))
-                                ae2
+                          fl2 = getFL ae2 vl2
                           vol2 = (update id vi vol)
                                  >< (S.replicate (nregions-1) vi)
                       loop (fl2, nv2, sbs2, aes2, vls2, ae2, vl2, vrts2, vol2)
@@ -933,6 +964,8 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
                       (fl, nv, sbs, aes, vls, ae, vl, vrts, vol) = params
   -- dans le code R il fait rowSums mais ça me semble inutile
   loop (fl, nv, sbs, aes, vls, ae, vl, vrts, vol)
+  where
+    getFL a v = UV.any (> (max ea (UV.maximum (UV.map ((*er).abs) v)))) a
 
 rowSumsV :: V.Vector UVectorD -> UVectorD -- pas utilisé
 rowSumsV = V.foldl1 (UV.zipWith (+))
