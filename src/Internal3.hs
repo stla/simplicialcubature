@@ -1,5 +1,5 @@
-{-# LANGUAGE DataKinds                #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DataKinds, RankNTypes, ExistentialQuantification                #-}
+{-# LANGUAGE FlexibleContexts, ScopedTypeVariables #-}
 module Internal3
   where
 import Control.Monad.ST
@@ -11,6 +11,7 @@ import           Data.Array.IO               (IOUArray, getBounds, getElems,
                                               mapIndices, newArray, newArray_,
                                               newListArray, readArray,
                                               writeArray)
+import Data.Array.Unsafe (unsafeFreeze)
 -- import qualified Data.Array.IO               as IOA
 --import qualified Data.Array.MArray           as MA
 -- import qualified Data.Array                  as A
@@ -22,7 +23,7 @@ import           Control.Monad               ((=<<))
 import           Data.Vector.Unboxed         (Vector, freeze, fromList, toList)
 import qualified Data.Vector.Unboxed         as UV
 import qualified Data.Vector as V
-import           Data.Vector.Unboxed.Mutable (IOVector, new, write)
+import           Data.Vector.Unboxed.Mutable (IOVector, new, write, unsafeWrite, unsafeRead)
 import qualified Data.Vector.Unboxed.Mutable as UMV
 import           Math.Combinat.Permutations  (permuteMultiset)
 import           Simplex                     (Simplex, simplexVolume)
@@ -255,10 +256,10 @@ smprms n key = do
           writeArray w (12,iw-6) ((ndbl+9)^9/(fromInt $ 256*n8*(n+9)))
         False -> return ()
     False -> return ()
-  uw <- STA.freeze w
+  uw <- unsafeFreeze w
   let rows = fmap (array1dToUVectorD.(extractRow uw)) (S.fromList [2..wts])
   let cols = transpose rows
-  pts_out <- UV.freeze pts
+  pts_out <- UV.unsafeFreeze pts
   let ptsU = UV.map fromInt pts_out
       row1 = fmap (\col -> 1 - UV.foldr (+) 0
                            (UV.zipWith (*) (UV.tail ptsU) col))
@@ -287,7 +288,7 @@ smprms n key = do
           ratio = nb / (UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) wk)))
           wknew = UV.map (*(sqrt ratio)) wk
       wcolsnew = foldl updateW wcols3 [3..rls]
-  g_out <- STA.freeze g
+  g_out <- unsafeFreeze g
   return (g_out, transpose wcolsnew, pts_out)
 
 transpose :: Seq UVectorD -> Seq UVectorD
@@ -299,7 +300,7 @@ matprod :: UMatrix -> UVectorD -> ST s (UVectorD)
 matprod mat x = do
   let (_, (m,n)) = UA.bounds mat
   out <- UMV.new m :: ST s (UMV.STVector s Double)
-  let step i | i == m+1 = freeze out
+  let step i | i == m+1 = UV.unsafeFreeze out
              | otherwise = do
               coef <- innerstep i 1 0
               UMV.unsafeWrite out (i-1) coef
@@ -336,7 +337,7 @@ outerProduct2 x1 x2 = do
       n2 = UV.length x2
   out <- STA.newArray_ ((1,1),(n1,n2)) :: ST s (STA.STUArray s (Int,Int) Double)
   --let step :: Int -> ST s (UMatrix)
-  let step i | i == n1 = STA.freeze out
+  let step i | i == n1 = unsafeFreeze out
              | otherwise = do
                 inner (x1 UV.! i) 0
               where
@@ -351,7 +352,7 @@ sumMatrices matrices = do
   let (_, (n1,n2)) = UA.bounds (head matrices)
   out <- STA.newArray_ ((1,1),(n1,n2)) :: ST s (STA.STUArray s (Int,Int) Double)
   --let step :: Int -> Int -> ST s (UMatrix)
-  let step i j | i == n1 && j == n2+1 = STA.freeze out
+  let step i j | i == n1 && j == n2+1 = unsafeFreeze out
                | j == n2+1 = step (i+1) 1 -- avec un inner tu gagnerais un test
                | otherwise = do
                  let coefs = map (\m -> m UA.! (i,j)) matrices
@@ -400,7 +401,7 @@ smprul vrts nf f vol g w pts = do
                                   True -> innerstep (k-2) (max (nmrl/y) x) nmrl
                                   False -> innerstep (k-2) x nmrl
   step 1
-  rgnerr_out <- STA.freeze rgnerr
+  rgnerr_out <- unsafeFreeze rgnerr
   return (basval, rgnerr_out)
 
 rowSums :: UMatrix -> ST s UVectorD
@@ -420,7 +421,7 @@ rowSums m = do
                              let coef = m UA.! (i,j)
                              inner (j+1) (x + coef)
   step 1
-  freeze rowSumsIO
+  UV.unsafeFreeze rowSumsIO
 
 rowMeans :: UMatrix -> ST s UVectorD
 rowMeans m = do
@@ -548,8 +549,8 @@ smpdfs0 nd nf f top sbs vrts = do
               UMV.unsafeWrite iejeitjtisjsls 4 js
               UMV.unsafeWrite iejeitjtisjsls 5 it
             False -> return ()
-  iii <- UV.freeze iejeitjtisjsls
-  ddd <- UV.freeze dfmxdfnx
+  iii <- UV.unsafeFreeze iejeitjtisjsls
+  ddd <- UV.unsafeFreeze dfmxdfnx
   return (iii, ddd, nregions)
 
 smpdfs :: Int -> Int -> (UVectorD -> UVectorD) -> Int -> Int
@@ -562,8 +563,8 @@ smpdfs nd nf f top sbs vrts xxx =  STA.runSTUArray $ do
   let fc = f cn
       dfmd = UV.foldr (+) 0 (UV.map abs fc)
       (iejeitjtisjsls, dfmxdfnx, nregions) = xxx
-  --vrts2 <- newArray_ ((1,1,1),(nd,nd+1,sbs+nregions-1)) :: ST s (STA.STUArray s (Int,Int,Int) Double)
-  vrts2 <- STA.thaw vrts
+  vrts2 <- newArray_ ((1,1,1),(nd,nd+1,sbs+nregions-1)) :: ST s (STA.STUArray s (Int,Int,Int) Double)
+  --vrts2 <- STA.thaw vrts
   -- let replaceDimensionIO :: (Int,Int) -> STA.STUArray s Int Double -> ST s ()
   --     replaceDimensionIO vrts2 (j,k) v = fixST $ return $ loop 1
   --                                     where
@@ -582,25 +583,25 @@ smpdfs nd nf f top sbs vrts xxx =  STA.runSTUArray $ do
   --                    STA.writeArray m (i,j,k) (v UA.! i)
   --                    loop (i+1)
   -- let go1 :: Int -> ST s ()
-  --     go1 i | i == nd+1 = return ()
-  --           | otherwise = do
-  --             let go2 :: Int -> ST s ()
-  --                 go2 j | j == nd+2 = go1 (i+1)
-  --                       | otherwise = do
-  --                         let go3 :: Int -> ST s ()
-  --                             go3 k | k == sbs+nregions = go2 (j+1)
-  --                                   | otherwise = do
-  --                                     case k <= sbs of
-  --                                       True -> do
-  --                                         let coef = vrts UA.! (i,j,k)
-  --                                         fixST $ return $ STA.writeArray vrts2 (i,j,k) coef
-  --                                       False -> do
-  --                                         let coef = v UA.! (i,j)
-  --                                         fixST $ return $ STA.writeArray vrts2 (i,j,k) coef
-  --                                     go3 (k+1)
-  --                         go3 1
-  --             go2 1
-  -- go1 1
+  let go1 i | i == nd+1 = return ()
+            | otherwise = do
+              --let go2 :: Int -> ST s ()
+              let go2 j | j == nd+2 = go1 (i+1)
+                        | otherwise = do
+                          -- let go3 :: Int -> ST s ()
+                          let go3 k | k == sbs+nregions = go2 (j+1)
+                                    | otherwise = do
+                                      case k <= sbs of
+                                        True -> do
+                                          let coef = vrts UA.! (i,j,k)
+                                          STA.writeArray vrts2 (i,j,k) coef
+                                        False -> do
+                                          let coef = v UA.! (i,j)
+                                          STA.writeArray vrts2 (i,j,k) coef
+                                      go3 (k+1)
+                          go3 1
+              go2 1
+  go1 1
   let is = (UV.!) iejeitjtisjsls 4
   let js = (UV.!) iejeitjtisjsls 5
   let vti = extractColumn v is
@@ -617,26 +618,31 @@ smpdfs nd nf f top sbs vrts xxx =  STA.runSTUArray $ do
       replaceDimensionU vrts2 (js,sbs+3) vtj
       let it = (UV.!) iejeitjtisjsls 2
       let jt = (UV.!) iejeitjtisjsls 3
-      vtit <- mapIndices (1,nd) (\i -> (i,it,top)) vrts2 -- :: IO IO1dArray
+--      vtit <- mapIndices (1,nd) (\i -> (i,it,top)) vrts2 -- :: IO IO1dArray
       vtjt <- mapIndices (1,nd) (\i -> (i,jt,top)) vrts2 -- :: IO IO1dArray
 --      let vtt = UV.map (/2) (UV.zipWith (+) vtit vtjt)
-      vtit_f <- STA.freeze vtit
-      vtjt_f <- STA.freeze vtjt
-      vtt <- zip1dArraysWith vtit_f vtjt_f (\x -> \y -> (x+y)/2)
-      replaceDimensionIO vrts2 (jt,top) vtt
-      replaceDimensionIO vrts2 (it,sbs+1) vtt
+      -- vtit_f <- STA.freeze vtit
+      -- vtjt_f <- STA.freeze vtjt
+      -- vtt <- zip1dArraysWith vtit_f vtjt_f (\x -> \y -> (x+y)/2)
+      --replaceDimensionIO vrts2 (jt,top) vtt
+      replaceDimensionWith vrts2 (jt,top) (it,sbs+1) it jt top top (\x -> \y -> (x+y)/2)
+--      replaceDimensionIO vrts2 (it,sbs+1) vtt
       replaceDimensionIO vrts2 (jt,sbs+1) vtjt
-      vti2IO <- mapIndices (1,nd) (\i -> (i,it,sbs+2)) vrts2 -- :: IO IO1dArray
-      vtj2IO <- mapIndices (1,nd) (\i -> (i,jt,sbs+2)) vrts2 -- :: IO IO1dArray
+      -- vti2IO <- mapIndices (1,nd) (\i -> (i,it,sbs+2)) vrts2 -- :: IO IO1dArray
+      vtj2IO <- mapIndices (1,nd) (\i -> (i,jt,sbs+2)) vrts2  -- :: IO IO1dArray
       -- vti2 <- (=<<) (return . fromList) (getElems vti2IO)
       -- vtj2 <- (=<<) (return . fromList) (getElems vtj2IO)
 --      let vt2 = UV.map (/2) (UV.zipWith (+) vti2 vtj2)
-      vti2IO_f <- STA.freeze vti2IO
-      vtj2IO_f <- STA.freeze vtj2IO
-      vt2 <- zip1dArraysWith vti2IO_f vtj2IO_f (\x -> \y -> (x+y)/2)
-      replaceDimensionIO vrts2 (jt,sbs+2) vt2
-      replaceDimensionIO vrts2 (it,sbs+3) vt2
+      -- vti2IO_f <- STA.freeze vti2IO
+      -- vtj2IO_f <- STA.freeze vtj2IO
+      -- -- let vti2IO_f = getAt nd (it,sbs+2) vrts2
+      -- -- let vtj2IO_f = getAt nd (jt,sbs+2) vrts2
+      -- vt2 <- zip1dArraysWith vti2IO_f vtj2IO_f (\x -> \y -> (x+y)/2)
+      -- replaceDimensionIO vrts2 (jt,sbs+2) vt2
+      -- replaceDimensionIO vrts2 (it,sbs+3) vt2
+      replaceDimensionWith vrts2 (jt,sbs+2) (it,sbs+3) it jt (sbs+2) (sbs+2) (\x -> \y -> (x+y)/2)
       replaceDimensionIO vrts2 (jt,sbs+3) vtj2IO
+--      replaceDimension'' vrts2 (jt,sbs+3) (sbs+2)
     False -> do
 --      let vt = UV.map (/3) (UV.zipWith (+) (UV.map (*2) vti) vtj)
       vt <- zip1dArraysWith vti vtj (\x -> \y -> (2*x+y)/3)
@@ -652,14 +658,15 @@ smpdfs nd nf f top sbs vrts xxx =  STA.runSTUArray $ do
           let ls = (UV.!) iejeitjtisjsls 6
           -- vtj1IO <- mapIndices (1,nd) (\i -> (i,js,sbs+1)) vrts2 :: IO IO1dArray
           -- vtl1IO <- mapIndices (1,nd) (\i -> (i,ls,sbs+1)) vrts2 :: IO IO1dArray
-          vtj1 <- STA.mapIndices (1,nd) (\i -> (i,js,sbs+1)) vrts2 -- :: ST s2 (STA.STUArray s1 Int Double)
-          vtl1 <- fixST $ return $ STA.mapIndices (1,nd) (\i -> (i,ls,sbs+1)) vrts2 -- :: STA.STUArray s Int Double
+--          vtj1 <- STA.mapIndices (1,nd) (\i -> (i,js,sbs+1)) vrts2 -- :: ST s2 (STA.STUArray s1 Int Double)
+          vtl1 <- STA.mapIndices (1,nd) (\i -> (i,ls,sbs+1)) vrts2 -- :: STA.STUArray s Int Double
 --          let vt1 = UV.map (/2) (UV.zipWith (+) vtj1 vtl1)
-          vtj1_f <- STA.freeze vtj1
-          vtl1_f <- STA.freeze vtl1
-          vt1 <- zip1dArraysWith vtj1_f vtl1_f (\x -> \y -> (x+y)/2)
-          replaceDimensionIO vrts2 (ls,sbs+1) vt1
-          replaceDimensionIO vrts2 (js,sbs+2) vt1
+          -- vtj1_f <- STA.freeze vtj1
+          -- vtl1_f <- STA.freeze vtl1
+          -- vt1 <- zip1dArraysWith vtj1_f vtl1_f (\x -> \y -> (x+y)/2)
+          -- replaceDimensionIO vrts2 (ls,sbs+1) vt1
+          -- replaceDimensionIO vrts2 (js,sbs+2) vt1
+          replaceDimensionWith vrts2 (ls,sbs+1) (js,sbs+2) js ls (sbs+1) (sbs+1) (\x -> \y -> (x+y)/2)
           replaceDimensionIO vrts2 (ls,sbs+2) vtl1
         False -> do
 --          let vv = UV.map (/3) (UV.zipWith (+) vti (UV.map (*2) vtj))
@@ -679,6 +686,23 @@ smpdfs nd nf f top sbs vrts xxx =  STA.runSTUArray $ do
   return vrts2
   where
         -- replaceDimensionIO :: (STA.STUArray s (Int,Int,Int) Double) -> (Int,Int) -> STA.STUArray s Int Double -> ST s ()
+        replaceDimensionWith m (j,k) (jj,kk) j1 j2 k1 k2 f = loop 1
+                                          where
+                                            loop i | i == nd+1 = return ()
+                                                   | otherwise = do
+                                                     coef1 <- STA.readArray m (i,j1,k1)
+                                                     coef2 <- STA.readArray m (i,j2,k2)
+                                                     STA.writeArray m (i,j,k) (f coef1 coef2)
+                                                     STA.writeArray m (i,jj,kk) (f coef1 coef2)
+                                                     loop (i+1)
+        replaceDimension'' m (j,k) kk = loop 1
+                                        where
+                                          --loop :: Int -> ST s ()
+                                          loop i | i == nd+1 = return ()
+                                                 | otherwise = do
+                                                   coef <- STA.readArray m (i,j,kk)
+                                                   STA.writeArray m (i,j,k) coef
+                                                   loop (i+1)
         replaceDimensionIO m (j,k) v = loop 1
                                         where
                                           --loop :: Int -> ST s ()
@@ -696,6 +720,34 @@ smpdfs nd nf f top sbs vrts xxx =  STA.runSTUArray $ do
                           STA.writeArray m (i,j,k) (v UA.! i)
                           loop (i+1)
 
+getAt :: Int -> (Int,Int) -> (forall s . (STA.STUArray s (Int,Int,Int) Double)) -> U1dArray
+getAt nd (j,k) m = STA.runSTUArray $
+                     STA.mapIndices (1,nd) (\i -> (i,j,k)) m -- :: ST s1 (STA.STUArray s1 Int Double))
+-- getAt :: Int -> (Int,Int) -> (forall s.(STA.STUArray s (Int,Int,Int) Double)) -> U1dArray
+-- getAt nd (j,k) m = STA.runSTUArray $ do -- STA.mapIndices (1,nd) (\i -> (i,j,k)) m
+--                      out <- STA.newArray_ (1,nd)
+--                      loop 1 out
+--                      return out
+--                     where
+--                       loop :: Int -> STA.STUArray s Int Double -> ST s1 ()
+--                       loop i o | i == nd+1 = return ()
+--                                | otherwise = do
+--                                  coef <- STA.readArray m (i,j,k) :: ST s1 (Double)
+--                                  STA.writeArray o i coef
+--                                  loop (i+1) o
+
+-- getAt :: Int -> (Int,Int) -> STA.STUArray s (Int,Int,Int) Double -> STA.STUArray s Int Double -> U1dArray
+-- getAt nd (j,k) m out = STA.runSTUArray $ do -- STA.mapIndices (1,nd) (\i -> (i,j,k)) m
+--                      -- out <- STA.newArray_ (1,nd)
+--                      loop 1
+--                      return out
+--                     where
+-- --                      loop :: Int -> ST s (STA.STUArray s1 Int Double)
+--                       loop i | i == nd+1 = return ()
+--                              | otherwise = do
+--                                coef <- STA.readArray m (i,j,k)
+--                                STA.writeArray out i coef
+--                                loop (i+1)
                     -- replaceDimensionIO :: STA.STUArray s (Int,Int,Int) Double -> (Int,Int) -> IOVectorD -> ST s ()
                     -- replaceDimensionIO m (j,k) v = loop 1
                     --                                where
@@ -821,19 +873,21 @@ zip1dArraysWith a1 a2 f = do
                      STA.writeArray out i (f (a1 UA.! i) (a2 UA.! i))
                      loop (i+1) out n
 --
--- zip1dArraysWith' :: STA.STUArray s Int Double -> STA.STUArray s Int Double -> (Double -> Double -> Double) -> UArray Int Double
--- zip1dArraysWith' a1 a2 f = STA.runSTUArray $ do
---   (_, n) <- getBounds a1
---   out <- newArray_ (1,n) :: ST s (STA.STUArray s Int Double)
---   return $ loop 1 out n
+-- zip1dArraysWith' :: (forall s.(STA.STUArray s (Int,Int,Int) Double)) -> Int -> Int -> Int -> (Double -> Double -> Double) -> UArray Int Double
+-- zip1dArraysWith' m n j k f = STA.runSTUArray $ do
+--   --(_, n) <- getBounds a1
+--   out <- newArray_ (1,n) -- :: ST s (STA.STUArray s Int Double)
+--   -- a1 <- STA.mapIndices (1,n) (\i -> (i,j,k)) m
+--   -- a2 <- STA.mapIndices (1,n) (\i -> (i,j,k)) m
+--   loop 1 out n
 --   where
---       loop :: Int -> STA.STUArray s Int Double -> Int -> STA.STUArray s Int Double
+--       loop :: Int -> STA.STUArray s Int Double -> Int -> (forall s1 s2.(ST s2 (STA.STUArray s1 Int Double)))
 --       loop i out n | i == n+1 = return out
 --                    | otherwise = do
---                      coef1 <- STA.readArray a1 i
---                      coef2 <- STA.readArray a2 i
+--                      coef1 <- STA.readArray m (i,j,k)
+--                      coef2 <- STA.readArray m (i,j,k)
 --                      STA.writeArray out i (f coef1 coef2)
---                      return $ loop (i+1) out n
+--                      loop (i+1) out n
 
 toSimplex :: U3dArray -> Int -> Int -> Simplex
 toSimplex m n k =
