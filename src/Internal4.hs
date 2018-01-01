@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Internal4
   where
-import           Control.Monad               ((<$!>), (=<<))
+import           Control.Monad               ((<$!>), (=<<), (<=<))
 import           Control.Monad.ST            (ST)
 import           Data.Array.IArray           (Array)
 import           Data.Array.ST               (STUArray, getBounds, getElems,
@@ -29,10 +29,6 @@ import           Simplex                     (Simplex, simplexVolume)
 type STMatrix s = STUArray s (Int,Int) Double
 type ST1dArray s = STUArray s Int Double
 type ST3dArray s = STUArray s (Int,Int,Int) Double
-type IMatrix = Array (Int,Int) Double
-type UMatrix = UArray (Int,Int) Double
-type U3dArray = UArray (Int,Int,Int) Double
-type U1dArray = UArray Int Double
 type STVectorD s = STVector s Double
 type STVectorI s = STVector s Int
 type UVectorD = Vector Double
@@ -75,7 +71,7 @@ smprms n key = do
   writeArray g (1,2) (3/(ndbl+3))
   _ <- mapM (\j -> writeArray g (j,2) (1/(ndbl+3))) [2 .. np]
   unsafeWrite pts 1 np
-  let n2double = fromInt n2 :: Double
+  let n2double = fromInt n2
   writeArray w (2,iw) ((ndbl+3)^2 / (4*n2double))
   case key > 1 of
     True -> do
@@ -194,7 +190,7 @@ smprms n key = do
           tp = 2*pi/3
           a1 = -a + r*(cos(th))
           a2 = -a + r*(cos(th+2*tp))
-          a3 = -a + r*(cos(th+tp))
+          a3 = -a + r*(cos(th+tp)) -- a1+a2+a3 = -3a
           npdbl = fromInt np
       writeArray g (1,gms+5) ((1-ndbl*a1)/npdbl)
       _ <- mapM (\i -> writeArray g (i,gms+5) ((1+a1)/npdbl)) [2..np]
@@ -240,9 +236,14 @@ smprms n key = do
         False -> return [()]
       unsafeWrite pts 10 (div (np*n*(n-1)) 2)
       writeArray w (2,iw-6) (- (ndbl+3)^9/(fromInt $ 6*256*n6))
-      _ <- mapM (\i -> writeArray w (i,iw-6) ((ndbl+5)^9/(fromInt $ 512*n6*(n+7)))) [3,4]
-      _ <- mapM (\i -> writeArray w (i,iw-6) (-(ndbl+7)^9/(fromInt $ 256*n8))) [5,6,7]
-      _ <- mapM (\i -> writeArray w (i,iw-6) ((ndbl+9)^9/(fromInt $ 256*n8*(n+9)))) [8..11]
+      _ <- mapM
+           (\i -> writeArray w (i,iw-6) ((ndbl+5)^9/(fromInt $ 512*n6*(n+7))))
+           [3,4]
+      _ <- mapM (\i -> writeArray w (i,iw-6) (-(ndbl+7)^9/(fromInt $ 256*n8)))
+                [5,6,7]
+      _ <- mapM
+           (\i -> writeArray w (i,iw-6) ((ndbl+9)^9/(fromInt $ 256*n8*(n+9))))
+           [8..11]
       case n > 2 of
         True ->  do
           _ <- mapM (\i -> writeArray g (i,12) (3/(ndbl+9))) [1..4]
@@ -251,12 +252,10 @@ smprms n key = do
           writeArray w (12,iw-6) ((ndbl+9)^9/(fromInt $ 256*n8*(n+9)))
         False -> return ()
     False -> return ()
-  -- uw <- unsafeFreeze w
-  rowsIO <- mapM (extractRow w) (S.fromList [2..wts])
-  rows <- mapM array1dToUVectorD rowsIO
-  let cols = transpose rows
   pts_out <- unsafeFreeze pts
-  let ptsU = UV.map fromInt pts_out
+  rows <- mapM ((<=<) array1dToVector (extractRow w)) (S.fromList [2..wts])
+  let cols = transpose rows
+      ptsU = UV.map fromInt pts_out
       row1 = fmap (\col -> 1 - UV.foldr (+) 0
                            (UV.zipWith (*) (UV.tail ptsU) col))
                   (S.take rls cols)
@@ -326,11 +325,6 @@ matprod mat x = do
 -- --                        innerstep i (j+1) (s + mat_ij * (x UV.! (j-1)))
 --   step 1
 
-unfold1 :: (UVectorD -> Maybe UVectorD) -> UVectorD -> V.Vector UVectorD
-unfold1 f x = case f x of
-  Nothing -> V.singleton x
-  Just y  -> V.cons x (unfold1 f y)
-
 -- permuteV :: [Double] -> [UVectorD]
 -- permuteV xs = unfold1 next (fromList (sort xs)) where
 --   next xs = case findj (UV.reverse xs, UV.empty) of
@@ -349,23 +343,28 @@ permuteV2 :: [Double] -> V.Vector UVectorD
 permuteV2 xs = unfold1 next (fromList (sort xs)) where
   next xs = case findj (UV.reverse xs, UV.empty) of
     Nothing -> Nothing
-    Just (lls, rs) -> Just $ inc (UV.head lls) (UV.tail lls) (UV.reverse rs, UV.empty)
-  findj (xxs , yys) | xxs == empty = Nothing
-                    | yys == empty = findj (UV.tail xxs , UV.take 1 xxs)
-                    | otherwise = let x = UV.head xxs in if x >= (UV.head yys)
-                       then findj (UV.tail xxs , UV.cons x  yys )
-                       else Just (xxs, yys)
-  inc !u us (xxs , yys) = let x = UV.head xxs in if u >= x
-    then inc u us (UV.tail xxs , UV.cons x yys)
-    else UV.reverse (UV.cons x us) UV.++ UV.reverse (UV.cons u yys) UV.++ (UV.tail xxs)
+    Just (lls, rs) -> Just $
+                      inc (UV.head lls) (UV.tail lls) (UV.reverse rs, UV.empty)
+  findj (xxs, yys) | xxs == empty = Nothing
+                   | yys == empty = findj (UV.tail xxs, UV.take 1 xxs)
+                   | otherwise = let x = UV.head xxs in if x >= (UV.head yys)
+                      then findj (UV.tail xxs, UV.cons x yys)
+                      else Just (xxs, yys)
+  inc !u us (xxs, yys) = let x = UV.head xxs in if u >= x
+    then inc u us (UV.tail xxs, UV.cons x yys)
+    else UV.reverse (UV.cons x us) UV.++ UV.reverse (UV.cons u yys)
+         UV.++ (UV.tail xxs)
+  unfold1 :: (UVectorD -> Maybe UVectorD) -> UVectorD -> V.Vector UVectorD
+  unfold1 f x = case f x of
+    Nothing -> V.singleton x
+    Just y  -> V.cons x (unfold1 f y)
 
 smpsms :: STMatrix s -> Int -> (UVectorD -> UVectorD) -> ST1dArray s
        -> Double -> ST s (ST1dArray s)
 smpsms vertex nf f g scalar = do
   gAsList <- getElems g
   -- (_,(nrow,ncol)) <- getBounds vertex -- on dirait que ce truc a ralenti
-  f_gPermuts <- V.mapM ((fmap f).(matprod vertex))
-                       (permuteV2 gAsList) -- c'est ça qui est time-consuming
+  f_gPermuts <- V.mapM ((fmap f).(matprod vertex)) (permuteV2 gAsList) -- c'est ça qui est time-consuming
   -- prods <- matprod2 vertex (permuteV2 gAsList)
   -- let f_gPermuts = map f prods
   newListArray (1,nf)
@@ -410,22 +409,16 @@ sumMatrices matrices = do
                           coefs <- mapM (\m -> readArray m (i,j)) matrices
                           writeArray out (i,j) (sum coefs)
                           inner (j+1)
- -- let step i j | i == n1 && j == n2+1 = return out
- --              | j == n2+1 = step (i+1) 1 -- avec un inner tu gagnerais un test
- --              | otherwise = do
- --                coefs <- mapM (\m -> readArray m (i,j)) matrices
- --                writeArray out (i,j) (sum coefs)
- --                step i (j+1)
  step 1
 
 smprul :: STMatrix s -> Int -> (UVectorD -> UVectorD) -> Double -> STMatrix s
-      -> Seq UVectorD -> UVectorI -> ST s (ST1dArray s, ST1dArray s)
+       -> Seq UVectorD -> UVectorI -> ST s (ST1dArray s, ST1dArray s)
 smprul vrts nf f vol g w pts = do
  let rtmn = 0.1
      small = 1e-12
      errcof = 8
      rls = UV.length (index w 0)
-     ptsPositive = toList $ UV.findIndices (> 0) pts
+     ptsPositive = toList $ UV.findIndices (> 0) pts -- mets ça en sortie de la 1ère fun
  toSum <- mapM (\k -> do
                         g_colk <- extractColumn g (k+1)
                         sms <- smpsms vrts nf f g_colk vol
@@ -439,7 +432,7 @@ smprul vrts nf f vol g w pts = do
             | otherwise = do
                basval_i <- readArray basval i
                let nmbs = abs basval_i
-               !(rt, nmcp) <- innerstep rls rtmn nmbs
+               !(rt, nmcp) <- istep rls rtmn nmbs
                case rt < 1 && rls > 3 of
                  True  -> writeArray rgnerr i (rt*nmcp)
                  False -> return ()
@@ -448,17 +441,16 @@ smprul vrts nf f vol g w pts = do
                step (i+1)
              where
               --innerstep :: Int -> Double -> Double -> ST s (Double, Double)
-              innerstep k !x !y | k == 1 = return (x, y)
-                                | otherwise = do
-                                 rule_ik <- readArray rule (i,k)
-                                 rule_ikm1 <- readArray rule (i,k-1)
-                                 let nmrl = max (abs rule_ik) (abs rule_ikm1)
-                                 rgnerr_i <- readArray rgnerr i
-                                 writeArray rgnerr i (max nmrl rgnerr_i)
-                                 case nmrl > small*y && k < rls of
-                                   True -> innerstep (k-2) (max (nmrl/y) x)
-                                                     nmrl
-                                   False -> innerstep (k-2) x nmrl
+              istep k !x !y | k == 1 = return (x, y)
+                            | otherwise = do
+                             rule_ik <- readArray rule (i,k)
+                             rule_ikm1 <- readArray rule (i,k-1)
+                             let nmrl = max (abs rule_ik) (abs rule_ikm1)
+                             rgnerr_i <- readArray rgnerr i
+                             writeArray rgnerr i (max nmrl rgnerr_i)
+                             case nmrl > small*y && k < rls of
+                               True -> istep (k-2) (max (nmrl/y) x) nmrl
+                               False -> istep (k-2) x nmrl
  step 1
  return (basval, rgnerr)
 
@@ -481,13 +473,12 @@ rowMeans m = do
  step 1
  unsafeFreeze outIO
 
-array1dToUVectorD :: ST1dArray s -> ST s UVectorD
-array1dToUVectorD array = do
- (<$!>) fromList (getElems array)
+array1dToVector :: ST1dArray s -> ST s UVectorD
+array1dToVector array = (<$!>) fromList (getElems array)
 
-smpdfs0 :: Int -> (UVectorD -> UVectorD) -> Int
-       -> ST3dArray s -> ST s (STVectorI s, STVectorD s, Int)
-smpdfs0 nd f top vrts = do -- nf et sbs pas utilisés
+smpdfs0 :: Int -> (UVectorD -> UVectorD) -> Int -> ST3dArray s
+        -> ST s (STVectorI s, STVectorD s, Int)
+smpdfs0 nd f top vrts = do
   let cuttf = 2.0
       cuttb = 8.0
   v <- mapIndices ((1,1),(nd,nd+1)) (\(i,j) -> (i,j,top)) vrts
@@ -508,10 +499,10 @@ smpdfs0 nd f top vrts = do -- nf et sbs pas utilisés
 --                  inner :: Int -> Double -> ST s (Double)
                    inner j !y | j == nd+2 = return y
                               | otherwise = do
-                                vi <- (=<<) array1dToUVectorD (extractColumn v i)
-                                vj <- (=<<) array1dToUVectorD (extractColumn v j)
-                                let h = UV.map (*(2/(5*(fromInt nd +1))))
-                                               (UV.zipWith (-) vi vj)
+                                vi <- (=<<) array1dToVector (extractColumn v i)
+                                vj <- (=<<) array1dToVector (extractColumn v j)
+                                let h = UV.zipWith
+                                        (((*(2/(5*(fromInt nd+1)))).).(-)) vi vj
                                     ewd = UV.foldr (+) 0 (UV.map abs h)
                                     twoh = UV.map (*2) h
                                     t1 = f (UV.zipWith (-) cn twoh)
@@ -522,7 +513,8 @@ smpdfs0 nd f top vrts = do -- nf et sbs pas utilisés
                                     t6 = UV.zipWith (((*(-4)).).(+)) t4 t5
                                     tsum = foldl1 (UV.zipWith (+)) [t1,t2,t3,t6]
                                     dfr1 = UV.foldr (+) 0 (UV.map abs tsum)
-                                    dfr2 = if dfmd+dfr1/8 == dfmd then 0 else dfr1
+                                    dfr2 = if dfmd+dfr1/8 == dfmd
+                                              then 0 else dfr1
                                     dfr3 = dfr2*ewd
                                 dfmx <- unsafeRead dfmxdfnx 0
                                 case dfr3 >= dfmx of
@@ -606,32 +598,13 @@ smpdfs :: Int -> Int -> Int
        -> ST3dArray s -> (STVectorI s, STVectorD s, Int) -> ST s (ST3dArray s)
 smpdfs nd top sbs vrts xxx = do
   let cuttf = 2.0
-  v <- mapIndices ((1,1),(nd,nd+1)) (\(i,j) -> (i,j,top)) vrts
   let (iejeitjtisjsls, dfmxdfnx, nregions) = xxx
-  vrts2 <- newArray_ ((1,1,1),(nd,nd+1,sbs+nregions-1)) :: ST s (ST3dArray s)
-  let go1 i | i == nd+1 = return ()
-            | otherwise = do
-              --let go2 :: Int -> ST s ()
-              let go2 j | j == nd+2 = go1 (i+1)
-                        | otherwise = do
-                          -- let go3 :: Int -> ST s ()
-                          let go3 k | k == sbs+nregions = go2 (j+1)
-                                    | otherwise = do
-                                      case k <= sbs of
-                                        True -> do
-                                          coef <- readArray vrts (i,j,k)
-                                          writeArray vrts2 (i,j,k) coef
-                                        False -> do
-                                          coef <- readArray v (i,j)
-                                          writeArray vrts2 (i,j,k) coef
-                                      go3 (k+1)
-                          go3 1
-              go2 1
-  go1 1
+  vrts2 <- mapIndices ((1,1,1),(nd,nd+1,sbs+nregions-1))
+                      (\(i,j,k) -> (i, j, if k <= sbs then k else top)) vrts
   is <- unsafeRead iejeitjtisjsls 4
   js <- unsafeRead iejeitjtisjsls 5
-  vti <- (=<<) array1dToUVectorD (extractColumn v is)
-  vtj <- (=<<) array1dToUVectorD (extractColumn v js)
+  vti <- (=<<) array1dToVector (mapIndices (1,nd) (\i -> (i,is,top)) vrts)
+  vtj <- (=<<) array1dToVector (mapIndices (1,nd) (\i -> (i,js,top)) vrts)
   case nregions == 4 of
     True -> do
       let vt = UV.zipWith (((*0.5).).(+)) vti vtj
@@ -644,14 +617,16 @@ smpdfs nd top sbs vrts xxx = do
       replaceDimension vrts2 (js,sbs+3) vtj
       it <- unsafeRead iejeitjtisjsls 2
       jt <- unsafeRead iejeitjtisjsls 3
-      vtit <- (=<<) array1dToUVectorD (mapIndices (1,nd) (\i -> (i,it,top)) vrts2)
-      vtjt <- (=<<) array1dToUVectorD (mapIndices (1,nd) (\i -> (i,jt,top)) vrts2)
+      vtit <- (=<<) array1dToVector (mapIndices (1,nd) (\i -> (i,it,top)) vrts2)
+      vtjt <- (=<<) array1dToVector (mapIndices (1,nd) (\i -> (i,jt,top)) vrts2)
       let vtt = UV.zipWith (((*0.5).).(+)) vtit vtjt
       replaceDimension vrts2 (jt,top) vtt
       replaceDimension vrts2 (it,sbs+1) vtt
       replaceDimension vrts2 (jt,sbs+1) vtjt
-      vti2 <- (=<<) array1dToUVectorD (mapIndices (1,nd) (\i -> (i,it,sbs+2)) vrts2) -- :: IO IO1dArray
-      vtj2 <- (=<<) array1dToUVectorD (mapIndices (1,nd) (\i -> (i,jt,sbs+2)) vrts2)  -- :: IO IO1dArray
+      vti2 <- (=<<) array1dToVector
+                    (mapIndices (1,nd) (\i -> (i,it,sbs+2)) vrts2)
+      vtj2 <- (=<<) array1dToVector
+                    (mapIndices (1,nd) (\i -> (i,jt,sbs+2)) vrts2)
       let vt2 = UV.zipWith (((*0.5).).(+)) vti2 vtj2
       replaceDimension vrts2 (jt,sbs+2) vt2
       replaceDimension vrts2 (it,sbs+3) vt2
@@ -668,8 +643,10 @@ smpdfs nd top sbs vrts xxx = do
           replaceDimension vrts2 (is,sbs+2) vt
           replaceDimension vrts2 (js,sbs+2) vtj
           ls <- unsafeRead iejeitjtisjsls 6
-          vtj1 <- (=<<) array1dToUVectorD (mapIndices (1,nd) (\i -> (i,js,sbs+1)) vrts2)
-          vtl1 <- (=<<) array1dToUVectorD (mapIndices (1,nd) (\i -> (i,ls,sbs+1)) vrts2)
+          vtj1 <- (=<<) array1dToVector
+                        (mapIndices (1,nd) (\i -> (i,js,sbs+1)) vrts2)
+          vtl1 <- (=<<) array1dToVector
+                        (mapIndices (1,nd) (\i -> (i,ls,sbs+1)) vrts2)
           let vt1 = UV.zipWith (((*0.5).).(+)) vtj1 vtl1
           replaceDimension vrts2 (ls,sbs+1) vt1
           replaceDimension vrts2 (js,sbs+2) vt1
@@ -679,121 +656,16 @@ smpdfs nd top sbs vrts xxx = do
           replaceDimension vrts2 (js,sbs+1) vv
           replaceDimension vrts2 (is,sbs+2) vv
           replaceDimension vrts2 (js,sbs+2) vtj
---   vti <- extractColumn v is
---   vtj <- extractColumn v js
---   case nregions == 4 of
---     True -> do
---       vt <- zip1dArraysWith vti vtj (\x -> \y -> (x+y)/2)
---       replaceDimensionIO vrts2 (js,top) vt
---       replaceDimensionU vrts2 (is,sbs+1) vti
---       replaceDimensionIO vrts2 (js,sbs+1) vt
---       replaceDimensionIO vrts2 (is,sbs+2) vt
---       replaceDimensionIO vrts2 (is,sbs+3) vt
---       replaceDimensionU vrts2 (js,sbs+2) vtj
---       replaceDimensionU vrts2 (js,sbs+3) vtj
---       it <- unsafeRead iejeitjtisjsls 2
---       jt <- unsafeRead iejeitjtisjsls 3
--- --      vtit <- mapIndices (1,nd) (\i -> (i,it,top)) vrts2 -- :: IO IO1dArray
---       vtjt <- mapIndices (1,nd) (\i -> (i,jt,top)) vrts2 -- :: IO IO1dArray
--- --      let vtt = UV.map (/2) (UV.zipWith (+) vtit vtjt)
---       -- vtit_f <- STA.freeze vtit
---       -- vtjt_f <- STA.freeze vtjt
---       -- vtt <- zip1dArraysWith vtit_f vtjt_f (\x -> \y -> (x+y)/2)
---       --replaceDimensionIO vrts2 (jt,top) vtt
---       replaceDimensionWith vrts2 (jt,top) (it,sbs+1) it jt top top (\x -> \y -> (x+y)/2)
--- --      replaceDimensionIO vrts2 (it,sbs+1) vtt
---       replaceDimensionIO vrts2 (jt,sbs+1) vtjt
---       -- vti2IO <- mapIndices (1,nd) (\i -> (i,it,sbs+2)) vrts2 -- :: IO IO1dArray
---       vtj2IO <- mapIndices (1,nd) (\i -> (i,jt,sbs+2)) vrts2  -- :: IO IO1dArray
---       -- vti2 <- (=<<) (return . fromList) (getElems vti2IO)
---       -- vtj2 <- (=<<) (return . fromList) (getElems vtj2IO)
--- --      let vt2 = UV.map (/2) (UV.zipWith (+) vti2 vtj2)
---       -- vti2IO_f <- STA.freeze vti2IO
---       -- vtj2IO_f <- STA.freeze vtj2IO
---       -- vt2 <- zip1dArraysWith vti2IO_f vtj2IO_f (\x -> \y -> (x+y)/2)
---       -- replaceDimensionIO vrts2 (jt,sbs+2) vt2
---       -- replaceDimensionIO vrts2 (it,sbs+3) vt2
---       replaceDimensionWith vrts2 (jt,sbs+2) (it,sbs+3) it jt (sbs+2) (sbs+2) (\x -> \y -> (x+y)/2)
---       replaceDimensionIO vrts2 (jt,sbs+3) vtj2IO
--- --      replaceDimension'' vrts2 (jt,sbs+3) (sbs+2)
---     False -> do
--- --      let vt = UV.map (/3) (UV.zipWith (+) (UV.map (*2) vti) vtj)
---       vt <- zip1dArraysWith vti vtj (\x -> \y -> (2*x+y)/3)
---       replaceDimensionIO vrts2 (js,top) vt
---       replaceDimensionIO vrts2 (is,sbs+1) vt
---       dfmx <- unsafeRead dfmxdfnx 0
---       dfnx <- unsafeRead dfmxdfnx 1 -- tu peux freezer dans smpdfs0
---       case dfmx/cuttf < dfnx of
---         True -> do
---           replaceDimensionU vrts2 (js,sbs+1) vtj
---           replaceDimensionIO vrts2 (is,sbs+2) vt
---           replaceDimensionU vrts2 (js,sbs+2) vtj
---           ls <- unsafeRead iejeitjtisjsls 6
---           -- vtj1IO <- mapIndices (1,nd) (\i -> (i,js,sbs+1)) vrts2 :: IO IO1dArray
---           -- vtl1IO <- mapIndices (1,nd) (\i -> (i,ls,sbs+1)) vrts2 :: IO IO1dArray
--- --          vtj1 <- STA.mapIndices (1,nd) (\i -> (i,js,sbs+1)) vrts2 -- :: ST s2 (STA.STUArray s1 Int Double)
---           vtl1 <- STA.mapIndices (1,nd) (\i -> (i,ls,sbs+1)) vrts2 -- :: STA.STUArray s Int Double
--- --          let vt1 = UV.map (/2) (UV.zipWith (+) vtj1 vtl1)
---           -- vtj1_f <- STA.freeze vtj1
---           -- vtl1_f <- STA.freeze vtl1
---           -- vt1 <- zip1dArraysWith vtj1_f vtl1_f (\x -> \y -> (x+y)/2)
---           -- replaceDimensionIO vrts2 (ls,sbs+1) vt1
---           -- replaceDimensionIO vrts2 (js,sbs+2) vt1
---           replaceDimensionWith vrts2 (ls,sbs+1) (js,sbs+2) js ls (sbs+1) (sbs+1) (\x -> \y -> (x+y)/2)
---           replaceDimensionIO vrts2 (ls,sbs+2) vtl1
---         False -> do
--- --          let vv = UV.map (/3) (UV.zipWith (+) vti (UV.map (*2) vtj))
---           vv <- zip1dArraysWith vti vtj (\x -> \y -> (x+2*y)/3)
---           replaceDimensionIO vrts2 (js,sbs+1) vv
---           replaceDimensionIO vrts2 (is,sbs+2) vv
---           replaceDimensionU vrts2 (js,sbs+2) vtj
   return vrts2
-  -- where
-  --       -- replaceDimensionIO :: (STA.STUArray s (Int,Int,Int) Double) -> (Int,Int) -> STA.STUArray s Int Double -> ST s ()
-  --       replaceDimensionWith m (j,k) (jj,kk) j1 j2 k1 k2 f = loop 1
-  --                                         where
-  --                                           loop i | i == nd+1 = return ()
-  --                                                  | otherwise = do
-  --                                                    coef1 <- STA.readArray m (i,j1,k1)
-  --                                                    coef2 <- STA.readArray m (i,j2,k2)
-  --                                                    STA.writeArray m (i,j,k) (f coef1 coef2)
-  --                                                    STA.writeArray m (i,jj,kk) (f coef1 coef2)
-  --                                                    loop (i+1)
-  --       replaceDimension'' m (j,k) kk = loop 1
-  --                                       where
-  --                                         --loop :: Int -> ST s ()
-  --                                         loop i | i == nd+1 = return ()
-  --                                                | otherwise = do
-  --                                                  coef <- STA.readArray m (i,j,kk)
-  --                                                  STA.writeArray m (i,j,k) coef
-  --                                                  loop (i+1)
-  --       replaceDimensionIO m (j,k) v = loop 1
-  --                                       where
-  --                                         --loop :: Int -> ST s ()
-  --                                         loop i | i == nd+1 = return ()
-  --                                                | otherwise = do
-  --                                                  coef <- STA.readArray v i
-  --                                                  STA.writeArray m (i,j,k) coef
-  --                                                  loop (i+1)
-  --       -- replaceDimensionU :: STA.STUArray s (Int,Int,Int) Double -> (Int,Int) -> U1dArray -> ST s ()
-  --       replaceDimensionU m (j,k) v = loop 1
-  --            where
-  --                -- loop :: Int -> ST s ()
-  --                loop i | i == nd+1 = return ()
-  --                       | otherwise = do
-  --                         coef <- readArray v i
-  --                         STA.writeArray m (i,j,k) coef
-  --                         loop (i+1)
-
-replaceDimension :: ST3dArray s -> (Int,Int) -> UVectorD -> ST s ()
-replaceDimension m (j,k) v = do
-  (_, (n,_,_)) <- getBounds m
---  let loop :: Int -> IO ()
-  let loop i | i == n+1 = return ()
-             | otherwise = do
-               writeArray m (i,j,k) ((UV.!) v (i-1))
-               loop (i+1)
-  loop 1
+  where
+    replaceDimension :: ST3dArray s -> (Int,Int) -> UVectorD -> ST s ()
+    replaceDimension m (j,k) v =
+      loop 1
+      where
+        loop i | i == nd+1 = return ()
+               | otherwise = do
+                 writeArray m (i,j,k) ((UV.!) v (i-1))
+                 loop (i+1)
 
 smpchc :: Int -> Int -> Int
 smpchc nd key =
@@ -812,14 +684,14 @@ adsimp nd nf mxfs f ea er key vrts info = do
     True -> adsimp nd nf mxfs f ea er 3 vrts info
     False -> do
       (_, (_,_,sbs)) <- getBounds vrts
-      let b = smpchc nd key
-      smpsad nd nf f mxfs ea er key b sbs vrts info
+      smpsad nd nf f mxfs ea er key (smpchc nd key) sbs vrts info
 
-type Params s = (Bool, Int, Int, Seq UVectorD, Seq UVectorD,
-               UVectorD, UVectorD, ST3dArray s, Seq Double)
+-- type Params s = (Bool, Int, Int, Seq UVectorD, Seq UVectorD,
+--                UVectorD, UVectorD, ST3dArray s, Seq Double)
 
 smpsad :: Int -> Int -> (UVectorD -> UVectorD) -> Int -> Double -> Double -> Int
-       -> Int -> Int -> ST3dArray s -> Bool -> ST s (UVectorD, UVectorD, Int, Bool)
+       -> Int -> Int -> ST3dArray s -> Bool
+       -> ST s (UVectorD, UVectorD, Int, Bool)
 smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
   let dfcost = 1 + 2*nd*(nd+1)
   (g, w, pts) <- smprms nd key
@@ -830,8 +702,8 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
               (\k -> mapIndices ((1,1),(nd,nd+1)) (\(i,j) -> (i,j,k)) vrts)
               (S.fromList [1..sbs])
   br <- mapM (\(m,v) -> smprul m nf f v g w pts) (S.zip matrices vol)
-  aes <- mapM (array1dToUVectorD.snd) br
-  vls <- mapM (array1dToUVectorD.fst) br
+  aes <- mapM (array1dToVector.snd) br
+  vls <- mapM (array1dToVector.fst) br
   let vl = foldl1 (UV.zipWith (+)) vls
       ae = foldl1 (UV.zipWith (+)) aes
       fl = UV.any (> (max ea (UV.maximum (UV.map ((*er).abs) vl)))) ae
@@ -852,12 +724,12 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
                                          (\(i,j) -> (i,j,k)) vrts2)
                                   (S.fromList ((id+1):[(sbs+1)..sbs2]))
                       br <- mapM (\m -> smprul m nf f vi g w pts) matrices
-                      rgnerrs' <- mapM (array1dToUVectorD.snd) br
-                      basvals' <- mapM (array1dToUVectorD.fst) br
-                      let vl2 = UV.zipWith (+) vl0
-                                               (foldl1 (UV.zipWith (+)) basvals')
-                          ae2 = UV.zipWith (+) ae0
-                                               (foldl1 (UV.zipWith (+)) rgnerrs')
+                      rgnerrs' <- mapM (array1dToVector.snd) br
+                      basvals' <- mapM (array1dToVector.fst) br
+                      let vl2 = UV.zipWith (+)
+                                   vl0 (foldl1 (UV.zipWith (+)) basvals')
+                          ae2 = UV.zipWith (+)
+                                   ae0 (foldl1 (UV.zipWith (+)) rgnerrs')
                           aes2 = (update id (index rgnerrs' 0) aes)
                                  >< (S.drop 1 rgnerrs')
                           vls2 = (update id (index basvals' 0) vls)
@@ -874,46 +746,30 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
   loop (fl, nv, sbs, aes, vls, ae, vl, vrts, vol)
 
 --
-zip1dArraysWith :: ST1dArray s -> ST1dArray s -> (Double -> Double -> Double) -> ST s (ST1dArray s)
-zip1dArraysWith a1 a2 f = do
-  (_, n) <- getBounds a1
-  out <- newArray_ (1,n) :: ST s (ST1dArray s)
-  loop 1 out n
-  where
-      --loop :: Int -> STA.STUArray s Int Double -> Int -> ST s (STA.STUArray s Int Double)
-      loop i out n | i == n+1 = return out
-                   | otherwise = do
-                     coef1 <- readArray a1 i
-                     coef2 <- readArray a2 i
-                     writeArray out i (f coef1 coef2)
-                     loop (i+1) out n
-
-zip1dArraysWith' :: U1dArray -> U1dArray -> (Double -> Double -> Double) -> ST s (ST1dArray s)
-zip1dArraysWith' a1 a2 f = do
-  let (_, n) = UA.bounds a1
-  out <- newArray_ (1,n) :: ST s (ST1dArray s)
-  loop 1 out n
-  where
-      loop :: Int -> ST1dArray s -> Int -> ST s (ST1dArray s)
-      loop i out n | i == n+1 = return out
-                   | otherwise = do
-                     writeArray out i (f (a1 UA.! i) (a2 UA.! i))
-                     loop (i+1) out n
---
--- zip1dArraysWith' :: (forall s.(STA.STUArray s (Int,Int,Int) Double)) -> Int -> Int -> Int -> (Double -> Double -> Double) -> UArray Int Double
--- zip1dArraysWith' m n j k f = STA.runSTUArray $ do
---   --(_, n) <- getBounds a1
---   out <- newArray_ (1,n) -- :: ST s (STA.STUArray s Int Double)
---   -- a1 <- STA.mapIndices (1,n) (\i -> (i,j,k)) m
---   -- a2 <- STA.mapIndices (1,n) (\i -> (i,j,k)) m
+-- zip1dArraysWith :: ST1dArray s -> ST1dArray s -> (Double -> Double -> Double) -> ST s (ST1dArray s)
+-- zip1dArraysWith a1 a2 f = do
+--   (_, n) <- getBounds a1
+--   out <- newArray_ (1,n) :: ST s (ST1dArray s)
 --   loop 1 out n
 --   where
---       loop :: Int -> STA.STUArray s Int Double -> Int -> (forall s1 s2.(ST s2 (STA.STUArray s1 Int Double)))
+--       --loop :: Int -> STA.STUArray s Int Double -> Int -> ST s (STA.STUArray s Int Double)
 --       loop i out n | i == n+1 = return out
 --                    | otherwise = do
---                      coef1 <- STA.readArray m (i,j,k)
---                      coef2 <- STA.readArray m (i,j,k)
---                      STA.writeArray out i (f coef1 coef2)
+--                      coef1 <- readArray a1 i
+--                      coef2 <- readArray a2 i
+--                      writeArray out i (f coef1 coef2)
+--                      loop (i+1) out n
+--
+-- zip1dArraysWith' :: U1dArray -> U1dArray -> (Double -> Double -> Double) -> ST s (ST1dArray s)
+-- zip1dArraysWith' a1 a2 f = do
+--   let (_, n) = UA.bounds a1
+--   out <- newArray_ (1,n) :: ST s (ST1dArray s)
+--   loop 1 out n
+--   where
+--       loop :: Int -> ST1dArray s -> Int -> ST s (ST1dArray s)
+--       loop i out n | i == n+1 = return out
+--                    | otherwise = do
+--                      writeArray out i (f (a1 UA.! i) (a2 UA.! i))
 --                      loop (i+1) out n
 
 toSimplex :: ST3dArray s -> Int -> Int -> ST s Simplex

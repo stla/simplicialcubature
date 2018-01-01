@@ -41,7 +41,7 @@ library
                      , matrix
                      , containers
   default-language:    Haskell2010
-  ghc-options:         -Wall -O2
+  ghc-options:         -Wall -O2 
 
 executable test
   if flag(exe)

@@ -361,12 +361,6 @@ matprod mat x = do
                                | otherwise = do
                                  mat_ij <- readArray mat (i,j)
                                  innerstep (j+1) (s + mat_ij * (x UV.! (j-1)))
-
-      -- innerstep :: Int -> Int -> Double -> IO Double
-      -- innerstep i j !s | j == n+1 = return s
-      --                  | otherwise = do
-      --                    mat_ij <- readArray mat (i,j)
-      --                    innerstep i (j+1) (s + mat_ij * (x UV.! (j-1)))
   step 1
 
 smpsms :: IOMatrix -> Int -> (UVectorD -> UVectorD) -> IO1dArray
@@ -448,12 +442,10 @@ smprul vrts nf f vol g w pts = do
   let rtmn = 0.1
       small = 1e-12
       errcof = 8
-  --(_, (_,rls)) <- getBounds w
       rls = UV.length (index w 0)
       ptsPositive = toList $ UV.findIndices (> 0) pts
   toSum <- mapM (\k -> do
                          g_colk <- extractColumn g (k+1)
---                         w_rowk <- extractRow w k
                          sms <- smpsms vrts nf f g_colk vol
                          outerProduct2 sms (index w k))
                 ptsPositive
@@ -539,8 +531,7 @@ testrowMeans = do
   rowMeans m
 
 array1dToUVectorD :: IO1dArray -> IO UVectorD
-array1dToUVectorD array = do
-  (<$!>) fromList (getElems array)
+array1dToUVectorD array = (<$!>) fromList (getElems array)
 -- array1dToUVectorD :: IO1dArray -> IO UVectorD
 -- array1dToUVectorD array = do
 --   (_,n) <- getBounds array
@@ -601,8 +592,6 @@ smpdfs nd f top sbs vrts = do
                              | otherwise = do
                               vi <- (=<<) array1dToUVectorD (extractColumn v i)
                               vj <- (=<<) array1dToUVectorD (extractColumn v j)
-                              --  vi <- array1dToUVectorD viIO
-                              --  vj <- array1dToUVectorD vjIO
                               let h = UV.map (*(2/(5*(fromInt nd +1))))
                                              (UV.zipWith (-) vi vj)
                                   ewd = UV.foldr (+) 0 (UV.map abs h)
@@ -783,7 +772,7 @@ replaceDimension m (j,k) v = do
                writeArray m (i,j,k) ((UV.!) v (i-1))
                loop (i+1)
   loop 1
---
+
 replaceDimensions :: IO3dArray -> (Int,Int) -> (Int,Int) -> UVectorD -> IO ()
 replaceDimensions m (j1,k1) (j2,k2) v = do
   (_, (n,_,_)) <- getBounds m
