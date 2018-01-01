@@ -352,14 +352,21 @@ matprod mat x = do
   out <- UMV.new m :: IO IOVectorD
   let step i | i == m+1 = unsafeFreeze out
              | otherwise = do
-              !coef <- innerstep i 1 0
+              !coef <- innerstep 1 0
               unsafeWrite out (i-1) coef
               step (i+1)
-      innerstep :: Int -> Int -> Double -> IO Double
-      innerstep i j !s | j == n+1 = return s
-                       | otherwise = do
-                         mat_ij <- readArray mat (i,j)
-                         innerstep i (j+1) (s + mat_ij * (x UV.! (j-1)))
+              where
+                innerstep :: Int -> Double -> IO Double
+                innerstep j !s | j == n+1 = return s
+                               | otherwise = do
+                                 mat_ij <- readArray mat (i,j)
+                                 innerstep (j+1) (s + mat_ij * (x UV.! (j-1)))
+
+      -- innerstep :: Int -> Int -> Double -> IO Double
+      -- innerstep i j !s | j == n+1 = return s
+      --                  | otherwise = do
+      --                    mat_ij <- readArray mat (i,j)
+      --                    innerstep i (j+1) (s + mat_ij * (x UV.! (j-1)))
   step 1
 
 smpsms :: IOMatrix -> Int -> (UVectorD -> UVectorD) -> IO1dArray
