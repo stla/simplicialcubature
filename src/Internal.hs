@@ -8,10 +8,11 @@ import           Data.Array.IO               (IOUArray, getBounds, getElems,
                                               newListArray, readArray,
                                               writeArray)
 import qualified Data.Array.IO               as IOA
+import           Data.List                   (foldl', foldl1')
 --import qualified Data.Array.MArray           as MA
 -- import qualified Data.Array                  as A
 --import qualified Data.Array.IArray           as IA
-import           Control.Monad               ((=<<), (<$!>))
+import           Control.Monad               ((<$!>), (=<<))
 import           Data.Array.Unboxed          (UArray)
 import qualified Data.Array.Unboxed          as UA
 import qualified Data.Foldable               as DF
@@ -19,11 +20,11 @@ import           Data.Maybe                  (fromJust)
 import           Data.Sequence               (Seq, index, update, (><))
 import qualified Data.Sequence               as S
 import qualified Data.Vector                 as V
-import           Data.Vector.Unboxed         (Vector, freeze, fromList, toList,
+import           Data.Vector.Unboxed         (Vector, fromList, toList,
                                               unsafeFreeze)
 import qualified Data.Vector.Unboxed         as UV
 import           Data.Vector.Unboxed.Mutable (IOVector, new, unsafeRead,
-                                              unsafeWrite, write)
+                                              unsafeWrite)
 import qualified Data.Vector.Unboxed.Mutable as UMV
 import           Math.Combinat.Permutations  (permuteMultiset)
 import           Simplex                     (Simplex, simplexVolume)
@@ -163,7 +164,7 @@ smprms n key = do
       _ <- mapM (\i -> writeArray g (i,6) (1/(ndbl+7))) [3 .. np]
       unsafeWrite pts 5 (np*n)
       _ <- mapM (\i -> writeArray g (i,7) (3/(ndbl+7))) [1,2,3]
-      case np > 3 of
+      _ <- case np > 3 of
         True  -> mapM (\i -> writeArray g (i,7) (1/(ndbl+7))) [4..np]
         False -> return [()]
       unsafeWrite pts 6 (div ((n-1)*n*np) 6)
@@ -234,7 +235,7 @@ smprms n key = do
       unsafeWrite pts 9 (div (np*n) 2)
       writeArray g (1,11) (5/(ndbl+9))
       _ <- mapM (\i -> writeArray g (i,11) (3/(ndbl+9))) [2,3]
-      case np > 3 of
+      _ <- case np > 3 of
         True  -> mapM (\i -> writeArray g (i,11) (1/(ndbl+9))) [4..np]
         False -> return [()]
       unsafeWrite pts 10 (div (np*n*(n-1)) 2)
@@ -250,8 +251,8 @@ smprms n key = do
                 [8..11]
       case n > 2 of
         True ->  do
-          mapM (\i -> writeArray g (i,12) (3/(ndbl+9))) [1..4]
-          mapM (\i -> writeArray g (i,12) (1/(ndbl+9))) [5..np]
+          _ <- mapM (\i -> writeArray g (i,12) (3/(ndbl+9))) [1..4]
+          _ <- mapM (\i -> writeArray g (i,12) (1/(ndbl+9))) [5..np]
           unsafeWrite pts 11 (div (np*n*(n-1)*(n-2)) 24)
           writeArray w (12,iw-6) ((ndbl+9)^9/(fromInt $ 256*n8*(n+9)))
         False -> return ()
@@ -317,7 +318,7 @@ smprms n key = do
           wk = UV.zipWith (-) (index cols (k-1)) prod2
           ratio = nb / (UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map (^2) wk)))
           wknew = UV.map (*(sqrt ratio)) wk
-      wcolsnew = foldl updateW wcols3 [3..rls]
+      wcolsnew = foldl' updateW wcols3 [3..rls]
   return (g, transpose wcolsnew, pts_out)
 
 -- --
@@ -368,7 +369,7 @@ smpsms vertex nf f g scalar = do
   f_gPermuts <- mapM ((fmap f).(matprod vertex).fromList)
                      (permuteMultiset gAsList)
   newListArray (1,nf)
-               (toList (UV.map (*scalar) (foldl1 (UV.zipWith (+)) f_gPermuts)))
+               (toList (UV.map (*scalar) (foldl1' (UV.zipWith (+)) f_gPermuts)))
 
 extractColumn :: IOMatrix -> Int -> IO IO1dArray
 extractColumn m j = do
@@ -406,14 +407,6 @@ outerProduct2 x1 x2 = do
   (_, n1) <- getBounds x1
   let n2 = UV.length x2
   out <- newArray_ ((1,1),(n1,n2)) :: IO IOMatrix
-  -- let step :: Int -> Int -> IO IOMatrix
-  --     step i j | i == n1 && j == n2+1 = return out
-  --              | j == n2+1 = step (i+1) 1
-  --              | otherwise = do
-  --                 x1_i <- readArray x1 i -- tu accèdes n1*n2 fois chaque indice - tupourrais éviter avec inner
-  --                 writeArray out (i,j) (x1_i * (x2 UV.! (j-1)))
-  --                 step i (j+1)
-  -- step 1 1
   let step :: Int -> IO IOMatrix
       step i | i == n1+1 = return out
              | otherwise = do
@@ -440,13 +433,6 @@ sumMatrices matrices = do
                            coefs <- mapM (\m -> readArray m (i,j)) matrices
                            writeArray out (i,j) (sum coefs)
                            inner (j+1)
-  -- let step :: Int -> Int -> IO IOMatrix
-  --     step i j | i == n1 && j == n2+1 = return out
-  --              | j == n2+1 = step (i+1) 1 -- avec un inner tu gagnerais un test
-  --              | otherwise = do
-  --                coefs <- mapM (\m -> readArray m (i,j)) matrices
-  --                writeArray out (i,j) (sum coefs)
-  --                step i (j+1)
   step 1
 
 smprul :: IOMatrix -> Int -> (UVectorD -> UVectorD) -> Double -> IOMatrix
@@ -579,9 +565,9 @@ getVectors n m k j1 j2 = do
   return (out1U,out2U)
 
 
-smpdfs :: Int -> Int -> (UVectorD -> UVectorD) -> Int -> Int
+smpdfs :: Int -> (UVectorD -> UVectorD) -> Int -> Int
        -> IO3dArray -> IO (Int, IO3dArray)
-smpdfs nd nf f top sbs vrts = do
+smpdfs nd f top sbs vrts = do
   let cuttf = 2.0
       cuttb = 8.0
       --is = 1
@@ -620,7 +606,7 @@ smpdfs nd nf f top sbs vrts = do
                                   t4 = f (UV.zipWith (-) cn h)
                                   t5 = f (UV.zipWith (+) cn h)
                                   t6 = UV.map (*(-4)) (UV.zipWith (+) t4 t5)
-                                  tsum = foldl1 (UV.zipWith (+)) [t1,t2,t3,t6]
+                                  tsum = foldl1' (UV.zipWith (+)) [t1,t2,t3,t6]
                                   dfr1 = UV.foldr (+) 0 (UV.map abs tsum)
                                   dfr2 = if dfmd+dfr1/8 == dfmd then 0 else dfr1
                                   dfr3 = dfr2*ewd
@@ -937,7 +923,7 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
                           id = fromJust $ S.findIndexL (== maximum maxs) maxs
                           vl0 = UV.zipWith (-) vl (index vls id)
                           ae0 = UV.zipWith (-) ae (index aes id)
-                      (nregions, vrts2) <- smpdfs nd nf f (id+1) sbs vrts
+                      (nregions, vrts2) <- smpdfs nd f (id+1) sbs vrts
                       let vi = (index vol id)/(fromInt nregions)
                           nv2 = nv + (nregions-1)*rcls -- nregions*rcls ?
                           sbs2 = sbs + nregions-1

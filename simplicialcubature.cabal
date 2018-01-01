@@ -41,7 +41,7 @@ library
                      , matrix
                      , containers
   default-language:    Haskell2010
-  ghc-options:         -Wall
+  ghc-options:         -Wall -O2
 
 executable test
   if flag(exe)
@@ -71,7 +71,7 @@ foreign-library simplicialcubature
                      , containers
   hs-source-dirs:      src-dll
   c-sources:           StartEnd.c
-  ghc-options:         "-fllvm"
+  ghc-options:         -fllvm -O2
   default-language:    Haskell2010
 
 source-repository head

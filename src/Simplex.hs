@@ -3,8 +3,7 @@ module Simplex
 import           Common
 import           Data.Array.IO      (thaw)
 import           Data.Array.Unboxed (UArray, array)
-import           Data.Matrix        (detLU, elementwiseUnsafe, fromLists,
-                                     multStd, detLaplace)
+import           Data.Matrix        (detLU, elementwiseUnsafe, fromLists)
 
 type Simplex = [[Double]]
 type Simplices = [Simplex]
