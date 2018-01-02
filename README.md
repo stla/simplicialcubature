@@ -6,12 +6,12 @@ Pure Haskell implementation of simplicial cubature.
 integrateOnSimplex
     :: (UVectorD -> UVectorD) -- integrand
     -> Simplices              -- domain of integration (union of the simplices)
-    -> Int                    -- number of components
+    -> Int                    -- number of components of the integrand
     -> Int                    -- maximum number of evaluations
     -> Double                 -- desired absolute error
     -> Double                 -- desired relative error
     -> Int                    -- integration rule: 1, 2, 3 or 4
-    -> IO Result              -- integral, error, evaluations, success
+    -> IO Results             -- values, error estimates, evaluations, success
 ```
 
 ## Example
@@ -36,8 +36,18 @@ Integrate:
 
 ```haskell
 > integrateOnSimplex f [simplex] 1 100000 0 1e-10 3
-Result {value = [0.8455356852954488]
-      , errorEstimate = [8.082378899762402e-11]
+Results {values = [0.8455356852954488]
+       , errorEstimates = [8.082378899762402e-11]
+       , evaluations = 8700
+       , success = True}
+```
+
+For a scalar-valued integrand, it's more convenient to use `integrateOnSimplex'`:
+
+```haskell
+> integrateOnSimplex' f [simplex] 100000 0 1e-10 3
+Result {value = 0.8455356852954488
+      , errorEstimate = 8.082378899762402e-11
       , evaluations = 8700
       , success = True}
 ```

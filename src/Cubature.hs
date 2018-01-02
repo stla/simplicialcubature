@@ -1,15 +1,23 @@
+{-# LANGUAGE DuplicateRecordFields #-}
 module Cubature
   where
 import Internal
 import Simplex
 import qualified Data.Vector.Unboxed         as UV
 
+data Results = Results
+  { values         :: [Double]
+  , errorEstimates :: [Double]
+  , evaluations    :: Int
+  , success        :: Bool
+  } deriving Show
+
 data Result = Result
-  { value         :: [Double]
-  , errorEstimate :: [Double]
+  { value         :: Double
+  , errorEstimate :: Double
   , evaluations   :: Int
   , success       :: Bool
-  } deriving (Show)
+  } deriving Show
 
 integrateOnSimplex
     :: (UVectorD -> UVectorD) -- integrand
@@ -19,7 +27,7 @@ integrateOnSimplex
     -> Double                 -- desired absolute error
     -> Double                 -- desired relative error
     -> Int                    -- integration rule: 1, 2, 3 or 4
-    -> IO Result              -- integral, error, evaluations, success
+    -> IO Results             -- integral, error, evaluations, success
 integrateOnSimplex f s ncomp maxevals absError relError rule = do
   let n = length (head s) - 1
   case isValidSimplices s of
@@ -27,7 +35,25 @@ integrateOnSimplex f s ncomp maxevals absError relError rule = do
       v <- simplicesToArray s
       (vals, errors, nevals, fl) <-
         adsimp n ncomp maxevals f absError relError rule v False
-      return $ Result (UV.toList vals) (UV.toList errors) nevals (not fl)
+      return $ Results (UV.toList vals) (UV.toList errors) nevals (not fl)
+    False -> error "invalid simplices"
+
+integrateOnSimplex'
+    :: (UVectorD -> UVectorD) -- integrand
+    -> Simplices              -- domain
+    -> Int                    -- maximum number of evaluations
+    -> Double                 -- desired absolute error
+    -> Double                 -- desired relative error
+    -> Int                    -- integration rule: 1, 2, 3 or 4
+    -> IO Result              -- integral, error, evaluations, success
+integrateOnSimplex' f s maxevals absError relError rule = do
+  let n = length (head s) - 1
+  case isValidSimplices s of
+    True -> do
+      v <- simplicesToArray s
+      (val, err, nevals, fl) <-
+        adsimp n 1 maxevals f absError relError rule v False
+      return $ Result (UV.head val) (UV.head err) nevals (not fl)
     False -> error "invalid simplices"
 
 fExample :: UVectorD -> UVectorD
