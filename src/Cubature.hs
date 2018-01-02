@@ -47,3 +47,10 @@ fExample2' v = UV.singleton $ sqrt((x!!3-x!!2)/(x!!1-x!!0))*exp(-(x!!1-x!!0))
 example2' maxevals rule = integrateOnSimplex fExample2'
                           [[[0,0,0,0],[1,1,1,1],[0,1,1,1],[0,0,1,1],[0,0,0,1]]]
                           1 maxevals 0 1e-5 rule
+
+fExample3 :: UVectorD -> UVectorD
+fExample3 v = UV.singleton (exp (UV.sum v))
+
+example3 maxevals rule = integrateOnSimplex fExample3
+                         [[[0,0,0],[1,1,1],[0,1,1],[0,0,1]]]
+                         1 maxevals 0 1e-5 rule
