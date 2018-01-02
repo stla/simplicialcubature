@@ -4,6 +4,13 @@ import Internal
 import Simplex
 import qualified Data.Vector.Unboxed         as UV
 
+data Result = Result
+  { value         :: [Double]
+  , errorEstimate :: [Double]
+  , evaluations   :: Int
+  , success       :: Bool
+  } deriving (Show)
+
 integrateOnSimplex
     :: (UVectorD -> UVectorD) -- integrand
     -> Simplices              -- domain
@@ -12,7 +19,7 @@ integrateOnSimplex
     -> Double                 -- desired absolute error
     -> Double                 -- desired relative error
     -> Int                    -- integration rule: 1, 2, 3 or 4
-    -> IO ([Double], [Double], Int, Bool) -- integral, error, nevals, code
+    -> IO Result              -- integral, error, evaluations, success
 integrateOnSimplex f s ncomp maxevals absError relError rule = do
   let n = length (head s) - 1
   case isValidSimplices s of
@@ -20,7 +27,7 @@ integrateOnSimplex f s ncomp maxevals absError relError rule = do
       v <- simplicesToArray s
       (vals, errors, nevals, fl) <-
         adsimp n ncomp maxevals f absError relError rule v False
-      return (UV.toList vals, UV.toList errors, nevals, fl)
+      return $ Result (UV.toList vals) (UV.toList errors) nevals (not fl)
     False -> error "invalid simplices"
 
 fExample :: UVectorD -> UVectorD
@@ -34,7 +41,8 @@ example rule = integrateOnSimplex fExample [canonicalSimplex 3] 2 10000 0 1e-5 r
 example' rule = integrateOnSimplex fExample' [canonicalSimplex 3] 2 10000 0 1e-5 rule
 
 fExample2 :: UVectorD -> UVectorD
-fExample2 v = UV.singleton $ sqrt((x!!3-x!!2)/(x!!1-x!!0))*exp(-(x!!1-x!!0))
+-- fExample2 v = UV.singleton $ sqrt((x!!3-x!!2)/(x!!1-x!!0))*exp(-(x!!1-x!!0))
+fExample2 v = UV.singleton $ exp(0.5*(log (x!!3-x!!2) - log (x!!1-x!!0)) - (x!!1-x!!0))
   where y = UV.toList v
         x = map (\i -> sum $ take i y) [1..4]
 

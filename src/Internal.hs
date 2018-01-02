@@ -723,7 +723,7 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
                           ae0 = UV.zipWith (-) ae' (index aes' imax)
                       (nregions, vrts2) <- smpdfs nd f (imax+1) sbs' vrts'
                       let vi = (index vol' imax)/(toDbl nregions)
-                          nv2 = nv' + (nregions-1)*rcls -- nregions*rcls ?
+                          nv2 = nv' + (nregions)*rcls + dfcost -- nregions*rcls ?
                           sbs2 = sbs' + nregions-1
                       matrices2 <- mapM
                                    (\k -> mapIndices ((1,1),(nd,nd+1))
