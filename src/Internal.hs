@@ -656,9 +656,10 @@ replaceDimensions m (j1,k1) (j2,k2) v = do
                loop (i+1)
   loop 1
 
+-- | Number of evaluations for each subregion
 smpchc :: Int -> Int -> Int
 smpchc nd key =
-  if key == 0 || key == 3
+  if key == 3
     then div ((nd+4)*(nd+3)*(nd+2)) 6 + (nd+2)*(nd+1)
     else if key == 1
       then 2*nd + 3
@@ -666,29 +667,32 @@ smpchc nd key =
         then div ((nd+3)*(nd+2)) 2 + 2*(nd+1)
         else div ((nd+5)*(nd+4)*(nd+3)*(nd+2)) 24 + 5*(div ((nd+2)*(nd+1)) 2)
 
+-- | Checks validity of parameters
 check :: Int -> Int -> Int -> Double -> Double -> Int -> Int -> Int
 check nd nf mxfs ea er sbs key =
-  if ea < 0 && er < 0
+  if ea < 0 || er < 0
     then 5
     else if nf < 1
       then 4
       else if nd < 2
         then 3
-        else if key < 0 || key > 4
+        else if key < 1 || key > 4
           then 2
-          else if mxfs < sbs*smpchc nd key
+          else if mxfs < sbs * smpchc nd key
             then 1
             else 0
 
 adsimp :: Int -> Int -> Int -> (UVectorD -> UVectorD) -> Double -> Double
        -> Int -> IO3dArray -> Bool -> IO (UVectorD, UVectorD, Int, Bool)
 adsimp nd nf mxfs f ea er key vrts info = do
-  case key == 0 of
-    True -> adsimp nd nf mxfs f ea er 3 vrts info
-    False -> do
-      (_, (_,_,sbs)) <- getBounds vrts
-      let b = smpchc nd key
-      smpsad nd nf f mxfs ea er key b sbs vrts info
+  (_, (_,_,sbs)) <- getBounds vrts
+  case check nd nf mxfs ea er sbs key of
+    0 -> smpsad nd nf f mxfs ea er key (smpchc nd key) sbs vrts info
+    1 -> smpsad nd nf f (sbs*(smpchc nd key)) ea er key (smpchc nd key) sbs vrts info
+    2 -> error "integration rule must be between 1 and 4"
+    3 -> error "dimension must be at least 2"
+    4 -> error "number of components must be at least 1"
+    5 -> error "requested errors must be positive"
 
 type Params = (Bool, Int, Int, Seq UVectorD, Seq UVectorD,
                UVectorD, UVectorD, IO3dArray, Seq Double)
