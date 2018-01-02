@@ -145,11 +145,12 @@ smprms n key = do
             False -> do
               let r2 = (ndbl+4+sqrt15) / (ndbl*ndbl+8*ndbl+1)
                   l2 = 1 - (ndbl+1)*r2
-                  den = pow l1 4 * (l1-l2) * (toDbl n4)
               writeArray w (gms+1,iw-3)
-                           ((2*(27-ndbl)/(ndbl+5)-l2*(13-ndbl))/den)
+                           ((2*(27-ndbl)/(ndbl+5)-l2*(13-ndbl)) /
+                           ((pow l1 4)*(l1-l2)*(toDbl n4)))
               writeArray w (gms+2,iw-3)
-                           ((2*(27-ndbl)/(ndbl+5)-l1*(13-ndbl))/den)
+                           ((2*(27-ndbl)/(ndbl+5)-l1*(13-ndbl)) /
+                           ((pow l2 4)*(l2-l1)*(toDbl n4)))
               writeArray w (gms+3,iw-3)
                            ((2/(ndbl+5)-d2)/((toDbl n4)*(d1-d2)*(pow d1 4)))
               writeArray w (gms+4,iw-3)
@@ -384,26 +385,26 @@ smprul vrts nf f vol g w pospts = do
              | otherwise = do
                 basval_i <- readArray basval i
                 let nmbs = abs basval_i
-                !(rt, nmcp) <- innerstep rls rtmn 0 nmbs
+                !(rt, nmcp) <- inner rls rtmn 0 nmbs
                 case rt < 1 && rls > 3 of
                   True  -> writeArray rgnerr i (rt*nmcp)
                   False -> return ()
                 rgnerr_i <- readArray rgnerr i
                 writeArray rgnerr i (max (errcof*rgnerr_i) (small*nmbs))
                 step (i+1)
-                where
-                 innerstep :: Int -> Double -> Double -> Double -> IO (Double, Double)
-                 innerstep k !x !y !z | k == 1 = return (x, y)
-                                      | otherwise = do
-                                        rule_ik <- readArray rule (i,k)
-                                        rule_ikm1 <- readArray rule (i,k-1)
-                                        let nmrl = max (abs rule_ik) (abs rule_ikm1)
-                                        rgnerr_i <- readArray rgnerr i
-                                        writeArray rgnerr i (max nmrl rgnerr_i)
-                                        case nmrl > small*z && k < rls of
-                                          True -> innerstep (k-2) (max (nmrl/y) x)
-                                                            nmrl z
-                                          False -> innerstep (k-2) x nmrl z
+              where
+               inner :: Int -> Double -> Double -> Double -> IO (Double, Double)
+               inner k !x !y !z | k == 1 = return (x, y)
+                                | otherwise = do
+                                  rule_ik <- readArray rule (i,k)
+                                  rule_ikm1 <- readArray rule (i,k-1)
+                                  let nmrl = max (abs rule_ik) (abs rule_ikm1)
+                                  rgnerr_i <- readArray rgnerr i
+                                  writeArray rgnerr i (max nmrl rgnerr_i)
+                                  case nmrl > small*z && k < rls of
+                                    True -> inner (k-2) (max (nmrl/y) x)
+                                                      nmrl z
+                                    False -> inner (k-2) x nmrl z
   step 1
   return (basval, rgnerr)
 

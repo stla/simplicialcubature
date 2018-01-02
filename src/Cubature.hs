@@ -39,7 +39,7 @@ integrateOnSimplex f s ncomp maxevals absError relError rule = do
     False -> error "invalid simplices"
 
 integrateOnSimplex'
-    :: (UVectorD -> UVectorD) -- integrand
+    :: (UVectorD -> Double)   -- integrand
     -> Simplices              -- domain
     -> Int                    -- maximum number of evaluations
     -> Double                 -- desired absolute error
@@ -52,7 +52,7 @@ integrateOnSimplex' f s maxevals absError relError rule = do
     True -> do
       v <- simplicesToArray s
       (val, err, nevals, fl) <-
-        adsimp n 1 maxevals f absError relError rule v False
+        adsimp n 1 maxevals ((UV.singleton).f) absError relError rule v False
       return $ Result (UV.head val) (UV.head err) nevals (not fl)
     False -> error "invalid simplices"
 
@@ -66,25 +66,25 @@ example rule = integrateOnSimplex fExample [canonicalSimplex 3] 2 10000 0 1e-5 r
 
 example' rule = integrateOnSimplex fExample' [canonicalSimplex 3] 2 10000 0 1e-5 rule
 
-fExample2 :: UVectorD -> UVectorD
+fExample2 :: UVectorD -> Double
 -- fExample2 v = UV.singleton $ sqrt((x!!3-x!!2)/(x!!1-x!!0))*exp(-(x!!1-x!!0))
-fExample2 v = UV.singleton $ exp(0.5*(log (x!!3-x!!2) - log (x!!1-x!!0)) - (x!!1-x!!0))
+fExample2 v = exp(0.5*(log (x!!3-x!!2) - log (x!!1-x!!0)) - (x!!1-x!!0))
   where y = UV.toList v
         x = map (\i -> sum $ take i y) [1..4]
 
-example2 maxevals rule = integrateOnSimplex fExample2 [canonicalSimplex 4] 1 maxevals 0 1e-5 rule
+example2 maxevals rule = integrateOnSimplex' fExample2 [canonicalSimplex 4] maxevals 0 1e-5 rule
 
-fExample2' :: UVectorD -> UVectorD
-fExample2' v = UV.singleton $ sqrt((x!!3-x!!2)/(x!!1-x!!0))*exp(-(x!!1-x!!0))
+fExample2' :: UVectorD -> Double
+fExample2' v = sqrt((x!!3-x!!2)/(x!!1-x!!0))*exp(-(x!!1-x!!0))
   where x = UV.toList v
 
-example2' maxevals rule = integrateOnSimplex fExample2'
+example2' maxevals rule = integrateOnSimplex' fExample2'
                           [[[0,0,0,0],[1,1,1,1],[0,1,1,1],[0,0,1,1],[0,0,0,1]]]
-                          1 maxevals 0 1e-5 rule
+                          maxevals 0 1e-5 rule
 
-fExample3 :: UVectorD -> UVectorD
-fExample3 v = UV.singleton (exp (UV.sum v))
+fExample3 :: UVectorD -> Double
+fExample3 v = exp (UV.sum v)
 
-example3 maxevals rule = integrateOnSimplex fExample3
+example3 maxevals rule = integrateOnSimplex' fExample3
                          [[[0,0,0],[1,1,1],[0,1,1],[0,0,1]]]
-                         1 maxevals 0 1e-5 rule
+                         maxevals 0 1e-5 rule

@@ -42,7 +42,15 @@ Results {values = [0.8455356852954488]
        , success = True}
 ```
 
-For a scalar-valued integrand, it's more convenient to use `integrateOnSimplex'`:
+For a scalar-valued integrand, it's more convenient to define a scalar-valued
+integrand:
+
+```haskell
+f :: Vector Double -> Double
+f v = exp (V.sum v)
+```
+
+and then to use `integrateOnSimplex'`:
 
 ```haskell
 > integrateOnSimplex' f [simplex] 100000 0 1e-10 3

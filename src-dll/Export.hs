@@ -2,12 +2,12 @@
 module Export
   where
 import qualified Cubature as CUB
+import Cubature (Result(..))
 -- import qualified Cubature2 as CUB2
 -- import qualified Cubature3 as CUB3
 import qualified Cubature4 as CUB4
 import           Foreign
 import           Foreign.C
-import Control.Monad.ST
 -- import Internal (seqToVector, seqToVector2)
 -- import Data.Vector.Unboxed as UV
 -- import Data.Sequence as S
@@ -31,10 +31,10 @@ test :: Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO ()
 test rule maxevals result = do
   rule <- peek rule
   maxevals <- peek maxevals
-  ([value], [errest], nevals, fl)
-    <- CUB.example2 (fromIntegral maxevals) (fromIntegral rule)
-  pokeArray result [realToFrac value, realToFrac errest,
-                    fromIntegral nevals, (fromIntegral.fromEnum) fl]
+  r <- CUB.example2 (fromIntegral maxevals) (fromIntegral rule)
+  pokeArray result [realToFrac (value r), realToFrac (errorEstimate r),
+                    fromIntegral (evaluations (r::Result)),
+                    (fromIntegral.fromEnum) (success (r::Result))]
 
 -- foreign export ccall test2 :: Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO ()
 -- test2 :: Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO ()
@@ -70,6 +70,7 @@ test4 :: Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO ()
 test4 rule maxevals result = do
   rule <- peek rule
   maxevals <- peek maxevals
-  let ([value], [errest], nevals, fl) = runST $ CUB4.example2 (fromIntegral maxevals) (fromIntegral rule)
-  pokeArray result [realToFrac value, realToFrac errest,
-                    fromIntegral nevals, (fromIntegral.fromEnum) fl]
+  let r = CUB4.example2 (fromIntegral maxevals) (fromIntegral rule)
+  pokeArray result [realToFrac (CUB4.value r), realToFrac (CUB4.errorEstimate r),
+                    fromIntegral (CUB4.evaluations (r::CUB4.Result)),
+                    (fromIntegral.fromEnum) (CUB4.success (r::CUB4.Result))]
