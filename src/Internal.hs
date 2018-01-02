@@ -2,7 +2,6 @@
 module Internal
   where
 import           Common
-import           Data.Array.IArray           (Array)
 import           Data.Array.IO               (IOUArray, getBounds, getElems,
                                               mapIndices, newArray, newArray_,
                                               newListArray, readArray,
@@ -25,11 +24,9 @@ import           Simplex                     (Simplex, simplexVolume)
 
 type IOMatrix = IOUArray (Int,Int) Double
 type IO1dArray = IOUArray Int Double
-type IMatrix = Array (Int,Int) Double
-type UMatrix = UArray (Int,Int) Double
 type IOVectorD = IOVector Double
 type IOVectorI = IOVector Int
-type UVectorD = Vector Double
+type VectorD = Vector Double
 
 toDbl :: Int -> Double
 toDbl = fromIntegral
@@ -40,7 +37,7 @@ pow x n = foldr (*) 1 (replicate n x)
 square :: Double -> Double
 square x = x*x
 
-smprms :: Int -> Int -> IO (IOMatrix, Seq UVectorD, [Int])
+smprms :: Int -> Int -> IO (IOMatrix, Seq VectorD, [Int])
 smprms n key = do
   let (rls, gms, wts) | key == 1 = (3, 2, 3) :: (Int, Int, Int)
                       | key == 2 = (5, 4, 6) :: (Int, Int, Int)
@@ -263,7 +260,7 @@ smprms n key = do
         False -> return ()
     False -> return ()
   rowsIO <- mapM (extractRow w) (S.fromList [2..wts])
-  rows <- mapM array1dToUVectorD rowsIO
+  rows <- mapM array1dToVectorD rowsIO
   let cols = transpose rows
   pts_out <- UV.unsafeFreeze pts
   let ptsU = UV.map toDbl pts_out
@@ -280,7 +277,7 @@ smprms n key = do
       ratio = nb / (UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map square col2)))
       wcol2 = UV.map (*(sqrt ratio)) col2
       wcols3 = (S.<|) col1 ((S.<|) wcol2 (S.drop 2 wcols2))
-  let updateW :: Seq UVectorD -> Int -> Seq UVectorD
+  let updateW :: Seq VectorD -> Int -> Seq VectorD
       updateW cols' k = update (k-1) wknew cols'
          where
           ptsW = UV.map (/nb) (UV.zipWith (*) ptsU (index cols' (k-1)))
@@ -291,17 +288,18 @@ smprms n key = do
           prod2 = (fromList.(DF.toList)) $
                   fmap ((UV.foldr (+) 0).(UV.zipWith (*) prod1)) rows'
           wk = UV.zipWith (-) (index cols' (k-1)) prod2
-          ratio' = nb / (UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map square wk)))
+          ratio' = nb / 
+                   (UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map square wk)))
           wknew = UV.map (*(sqrt ratio')) wk
       wcolsnew = foldl' updateW wcols3 [3..rls]
   return (g, transpose wcolsnew, toList $ UV.findIndices (/= 0) pts_out)
 
-transpose :: Seq UVectorD -> Seq UVectorD
+transpose :: Seq VectorD -> Seq VectorD
 transpose cols =
   fmap (\i -> (fromList.(DF.toList)) $ fmap (\col -> col UV.!i) cols)
        (S.fromList ([0..(UV.length (index cols 0) - 1)]))
 
-matprod :: IOMatrix -> UVectorD -> IO UVectorD
+matprod :: IOMatrix -> VectorD -> IO VectorD
 matprod mat x = do
   (_, (m,n)) <- getBounds mat
   out <- UMV.new m :: IO IOVectorD
@@ -318,7 +316,7 @@ matprod mat x = do
                                  innerstep (j+1) (s + mat_ij * (x UV.! (j-1)))
   step 1
 
-smpsms :: IOMatrix -> Int -> (UVectorD -> UVectorD) -> IO1dArray
+smpsms :: IOMatrix -> Int -> (VectorD -> VectorD) -> IO1dArray
        -> Double -> IO IO1dArray
 smpsms vertex nf f g scalar = do
   gAsList <- getElems g
@@ -337,7 +335,7 @@ extractRow m i = do
   (_, (_,ncol)) <- getBounds m
   mapIndices (1,ncol) (\j -> (i,j)) m
 
-outerProduct :: IO1dArray -> UVectorD -> IO IOMatrix
+outerProduct :: IO1dArray -> VectorD -> IO IOMatrix
 outerProduct x1 x2 = do
   (_, n1) <- getBounds x1
   let n2 = UV.length x2
@@ -370,8 +368,8 @@ sumMatrices matrices = do
                            inner (j+1)
   step 1
 
-smprul :: IOMatrix -> Int -> (UVectorD -> UVectorD) -> Double -> IOMatrix
-       -> Seq UVectorD -> [Int] -> IO (IO1dArray, IO1dArray)
+smprul :: IOMatrix -> Int -> (VectorD -> VectorD) -> Double -> IOMatrix
+       -> Seq VectorD -> [Int] -> IO (IO1dArray, IO1dArray)
 smprul vrts nf f vol g w pospts = do
   let rtmn = 0.1
       small = 1e-12
@@ -407,13 +405,12 @@ smprul vrts nf f vol g w pospts = do
                                   rgnerr_i <- readArray rgnerr i
                                   writeArray rgnerr i (max nmrl rgnerr_i)
                                   case nmrl > small*z && k < rls of
-                                    True -> inner (k-2) (max (nmrl/y) x)
-                                                      nmrl z
+                                    True -> inner (k-2) (max (nmrl/y) x) nmrl z
                                     False -> inner (k-2) x nmrl z
   step 1
   return (basval, rgnerr)
 
-rowMeans :: IOMatrix -> IO UVectorD
+rowMeans :: IOMatrix -> IO VectorD
 rowMeans m = do
   (_, (nrow,ncol)) <- getBounds m
   outIO <- new nrow :: IO IOVectorD
@@ -432,13 +429,13 @@ rowMeans m = do
   step 1
   unsafeFreeze outIO
 
-array1dToUVectorD :: IO1dArray -> IO UVectorD
-array1dToUVectorD array = (<$!>) fromList (getElems array)
+array1dToVectorD :: IO1dArray -> IO VectorD
+array1dToVectorD array = (<$!>) fromList (getElems array)
 
-getVectors :: Int -> IO3dArray -> Int -> Int -> Int -> IO (UVectorD, UVectorD) -- pas de gain
+getVectors :: Int -> IO3dArray -> Int -> Int -> Int -> IO (VectorD, VectorD) -- pas de gain
 getVectors n m k j1 j2 = do
-  out1U <- (=<<) array1dToUVectorD (mapIndices (1,n) (\i -> (i,j1,k)) m)
-  out2U <- (=<<) array1dToUVectorD (mapIndices (1,n) (\i -> (i,j2,k)) m)
+  out1U <- (=<<) array1dToVectorD (mapIndices (1,n) (\i -> (i,j1,k)) m)
+  out2U <- (=<<) array1dToVectorD (mapIndices (1,n) (\i -> (i,j2,k)) m)
   -- out1 <- new n :: IO IOVectorD
   -- out2 <- new n :: IO IOVectorD
   -- let loop :: Int -> IO ()
@@ -455,7 +452,7 @@ getVectors n m k j1 j2 = do
   return (out1U,out2U)
 
 
-smpdfs :: Int -> (UVectorD -> UVectorD) -> Int -> Int
+smpdfs :: Int -> (VectorD -> VectorD) -> Int -> Int
        -> IO3dArray -> IO (Int, IO3dArray)
 smpdfs nd f top sbs vrts = do
   let cuttf = 2.0
@@ -478,8 +475,8 @@ smpdfs nd f top sbs vrts = do
                   inner :: Int -> Double -> IO Double
                   inner j !y | j == nd+2 = return y
                              | otherwise = do
-                              vi <- (=<<) array1dToUVectorD (extractColumn v i)
-                              vj <- (=<<) array1dToUVectorD (extractColumn v j)
+                              vi <- (=<<) array1dToVectorD (extractColumn v i)
+                              vj <- (=<<) array1dToVectorD (extractColumn v j)
                               let h = UV.map (*(2/(5*(toDbl nd +1))))
                                              (UV.zipWith (-) vi vj)
                                   ewd = UV.foldr (+) 0 (UV.map abs h)
@@ -489,7 +486,7 @@ smpdfs nd f top sbs vrts = do
                                   t3 = UV.map (*6) fc
                                   t4 = f (UV.zipWith (-) cn h)
                                   t5 = f (UV.zipWith (+) cn h)
-                                  t6 = UV.map (*(-4)) (UV.zipWith (+) t4 t5)
+                                  t6 = UV.zipWith (((*(-4)).).(+)) t4 t5
                                   tsum = foldl1' (UV.zipWith (+)) [t1,t2,t3,t6]
                                   dfr1 = UV.foldr (+) 0 (UV.map abs tsum)
                                   dfr2 = if dfmd+dfr1/8 == dfmd then 0 else dfr1
@@ -593,8 +590,8 @@ smpdfs nd f top sbs vrts = do
   -- go1 1
   is <- unsafeRead iejeitjtisjsls 4
   js <- unsafeRead iejeitjtisjsls 5
-  vti <- (=<<) array1dToUVectorD (extractColumn v is)
-  vtj <- (=<<) array1dToUVectorD (extractColumn v js)
+  vti <- (=<<) array1dToVectorD (extractColumn v is)
+  vtj <- (=<<) array1dToVectorD (extractColumn v js)
   case nregions == 4 of
     True -> do
       let vt = UV.zipWith (((*0.5).).(+)) vti vtj
@@ -605,16 +602,16 @@ smpdfs nd f top sbs vrts = do
       it <- unsafeRead iejeitjtisjsls 2
       jt <- unsafeRead iejeitjtisjsls 3
       (vtit, vtjt) <- getVectors nd vrts2 top it jt
-      -- vtit <- (=<<) array1dToUVectorD (mapIndices (1,nd) (\i -> (i,it,top)) vrts2)
-      -- vtjt <- (=<<) array1dToUVectorD (mapIndices (1,nd) (\i -> (i,jt,top)) vrts2)
-      -- vtit <- array1dToUVectorD vtitIO -- (=<<) (return . fromList) (getElems vtitIO)
-      -- vtjt <- array1dToUVectorD vtjtIO -- (=<<) (return . fromList) (getElems vtjtIO)
+      -- vtit <- (=<<) array1dToVectorD (mapIndices (1,nd) (\i -> (i,it,top)) vrts2)
+      -- vtjt <- (=<<) array1dToVectorD (mapIndices (1,nd) (\i -> (i,jt,top)) vrts2)
+      -- vtit <- array1dToVectorD vtitIO -- (=<<) (return . fromList) (getElems vtitIO)
+      -- vtjt <- array1dToVectorD vtjtIO -- (=<<) (return . fromList) (getElems vtjtIO)
       let vtt = UV.zipWith (((*0.5).).(+)) vtit vtjt
       replaceDimensions vrts2 (jt,top) (it,sbs+1) vtt
       replaceDimension vrts2 (jt,sbs+1) vtjt
       (vti2, vtj2) <- getVectors nd vrts2 (sbs+2) it jt
-      -- vti2 <- (=<<) array1dToUVectorD (mapIndices (1,nd) (\i -> (i,it,sbs+2)) vrts2)
-      -- vtj2 <- (=<<) array1dToUVectorD (mapIndices (1,nd) (\i -> (i,jt,sbs+2)) vrts2) -- :: IO IO1dArray
+      -- vti2 <- (=<<) array1dToVectorD (mapIndices (1,nd) (\i -> (i,it,sbs+2)) vrts2)
+      -- vtj2 <- (=<<) array1dToVectorD (mapIndices (1,nd) (\i -> (i,jt,sbs+2)) vrts2) -- :: IO IO1dArray
       -- vti2 <- (=<<) (return . fromList) (getElems vti2IO)
       -- vtj2 <- (=<<) (return . fromList) (getElems vtj2IO)
       let vt2 = UV.zipWith (((*0.5).).(+)) vti2 vtj2
@@ -629,8 +626,8 @@ smpdfs nd f top sbs vrts = do
           replaceDimension vrts2 (js,sbs+2) vtj
           ls <- unsafeRead iejeitjtisjsls 6
           (vtj1, vtl1) <- getVectors nd vrts2 (sbs+1) js ls
-          -- vtj1 <- (=<<) array1dToUVectorD (mapIndices (1,nd) (\i -> (i,js,sbs+1)) vrts2)
-          -- vtl1 <- (=<<) array1dToUVectorD (mapIndices (1,nd) (\i -> (i,ls,sbs+1)) vrts2)
+          -- vtj1 <- (=<<) array1dToVectorD (mapIndices (1,nd) (\i -> (i,js,sbs+1)) vrts2)
+          -- vtl1 <- (=<<) array1dToVectorD (mapIndices (1,nd) (\i -> (i,ls,sbs+1)) vrts2)
           -- vtj1 <- (=<<) (return . fromList) (getElems vtj1IO)
           -- vtl1 <- (=<<) (return . fromList) (getElems vtl1IO)
           let vt1 = UV.zipWith (((*0.5).).(+)) vtj1 vtl1
@@ -642,7 +639,7 @@ smpdfs nd f top sbs vrts = do
           replaceDimension vrts2 (js,sbs+2) vtj
   return (nregions, vrts2)
   where
-    replaceDimension :: IO3dArray -> (Int,Int) -> UVectorD -> IO ()
+    replaceDimension :: IO3dArray -> (Int,Int) -> VectorD -> IO ()
     replaceDimension m (j,k) v = do
       let loop :: Int -> IO ()
           loop i | i == nd+1 = return ()
@@ -650,7 +647,7 @@ smpdfs nd f top sbs vrts = do
                    writeArray m (i,j,k) ((UV.!) v (i-1))
                    loop (i+1)
       loop 1
-    replaceDimensions :: IO3dArray -> (Int,Int) -> (Int,Int) -> UVectorD -> IO ()
+    replaceDimensions :: IO3dArray -> (Int,Int) -> (Int,Int) -> VectorD -> IO ()
     replaceDimensions m (j1,k1) (j2,k2) v = do
       let loop :: Int -> IO ()
           loop i | i == nd+1 = return ()
@@ -686,8 +683,8 @@ check nd nf mxfs ea er sbs key =
             then 1
             else 0
 
-adsimp :: Int -> Int -> Int -> (UVectorD -> UVectorD) -> Double -> Double
-       -> Int -> IO3dArray -> Bool -> IO (UVectorD, UVectorD, Int, Bool)
+adsimp :: Int -> Int -> Int -> (VectorD -> VectorD) -> Double -> Double
+       -> Int -> IO3dArray -> Bool -> IO (VectorD, VectorD, Int, Bool)
 adsimp nd nf mxfs f ea er key vrts info = do
   (_, (_,_,sbs)) <- getBounds vrts
   case check nd nf mxfs ea er sbs key of
@@ -698,11 +695,11 @@ adsimp nd nf mxfs f ea er key vrts info = do
     4 -> error "number of components must be at least 1"
     5 -> error "requested errors must be positive"
 
-type Params = (Bool, Int, Int, Seq UVectorD, Seq UVectorD,
-               UVectorD, UVectorD, IO3dArray, Seq Double)
+type Params = (Bool, Int, Int, Seq VectorD, Seq VectorD,
+               VectorD, VectorD, IO3dArray, Seq Double)
 
-smpsad :: Int -> Int -> (UVectorD -> UVectorD) -> Int -> Double -> Double -> Int
-       -> Int -> Int -> IO3dArray -> Bool -> IO (UVectorD, UVectorD, Int, Bool)
+smpsad :: Int -> Int -> (VectorD -> VectorD) -> Int -> Double -> Double -> Int
+       -> Int -> Int -> IO3dArray -> Bool -> IO (VectorD, VectorD, Int, Bool)
 smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
   let dfcost = 1 + 2*nd*(nd+1)
   (g, w, pospts) <- smprms nd key
@@ -713,12 +710,12 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
               (\k -> mapIndices ((1,1),(nd,nd+1)) (\(i,j) -> (i,j,k)) vrts)
               (S.fromList [1..sbs])
   br <- mapM (\(m,v) -> smprul m nf f v g w pospts) (S.zip matrices vol)
-  aes <- mapM (array1dToUVectorD.snd) br
-  vls <- mapM (array1dToUVectorD.fst) br
+  aes <- mapM (array1dToVectorD.snd) br
+  vls <- mapM (array1dToVectorD.fst) br
   let vl = foldl1 (UV.zipWith (+)) vls
       ae = foldl1 (UV.zipWith (+)) aes
       fl = getFL ae vl
-  let loop :: Params -> IO (UVectorD, UVectorD, Int, Bool)
+  let loop :: Params -> IO (VectorD, VectorD, Int, Bool)
       loop !params | not fl' || nv'+dfcost+4*rcls > mxfs =
                      return (vl', ae', nv', fl')
                    | otherwise = do
@@ -735,8 +732,8 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
                                           (\(i,j) -> (i,j,k)) vrts2)
                                    (S.fromList ((imax+1):[(sbs'+1)..sbs2]))
                       br2 <- mapM (\m -> smprul m nf f vi g w pospts) matrices2
-                      rgnerrs <- mapM (array1dToUVectorD.snd) br2
-                      basvals <- mapM (array1dToUVectorD.fst) br2
+                      rgnerrs <- mapM (array1dToVectorD.snd) br2
+                      basvals <- mapM (array1dToVectorD.fst) br2
                       let vl2 = UV.zipWith (+) vl0
                                 (foldl1 (UV.zipWith (+)) basvals)
                           ae2 = UV.zipWith (+) ae0

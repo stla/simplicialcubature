@@ -4,7 +4,7 @@ Pure Haskell implementation of simplicial cubature.
 
 ```haskell
 integrateOnSimplex
-    :: (UVectorD -> UVectorD) -- integrand
+    :: (VectorD -> VectorD)   -- integrand
     -> Simplices              -- domain of integration (union of the simplices)
     -> Int                    -- number of components of the integrand
     -> Int                    -- maximum number of evaluations
