@@ -2,8 +2,8 @@
 module Export
   where
 import qualified Cubature as CUB
-import qualified Cubature2 as CUB2
-import qualified Cubature3 as CUB3
+-- import qualified Cubature2 as CUB2
+-- import qualified Cubature3 as CUB3
 import qualified Cubature4 as CUB4
 import           Foreign
 import           Foreign.C
@@ -36,34 +36,34 @@ test rule maxevals result = do
   pokeArray result [realToFrac value, realToFrac errest,
                     fromIntegral nevals, (fromIntegral.fromEnum) fl]
 
-foreign export ccall test2 :: Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO ()
-test2 :: Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO ()
-test2 rule maxevals result = do
-  rule <- peek rule
-  maxevals <- peek maxevals
-  ([value], [errest], nevals, fl)
-    <- CUB2.example2 (fromIntegral maxevals) (fromIntegral rule)
-  pokeArray result [realToFrac value, realToFrac errest,
-                    fromIntegral nevals, (fromIntegral.fromEnum) fl]
-
-foreign export ccall test2p :: Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO ()
-test2p :: Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO ()
-test2p rule maxevals result = do
-  rule <- peek rule
-  maxevals <- peek maxevals
-  ([value], [errest], nevals, fl)
-    <- CUB2.example2' (fromIntegral maxevals) (fromIntegral rule)
-  pokeArray result [realToFrac value, realToFrac errest,
-                    fromIntegral nevals, (fromIntegral.fromEnum) fl]
-
-foreign export ccall test3 :: Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO ()
-test3 :: Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO ()
-test3 rule maxevals result = do
-  rule <- peek rule
-  maxevals <- peek maxevals
-  let ([value], [errest], nevals, fl) = runST $ CUB3.example2 (fromIntegral maxevals) (fromIntegral rule)
-  pokeArray result [realToFrac value, realToFrac errest,
-                    fromIntegral nevals, (fromIntegral.fromEnum) fl]
+-- foreign export ccall test2 :: Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO ()
+-- test2 :: Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO ()
+-- test2 rule maxevals result = do
+--   rule <- peek rule
+--   maxevals <- peek maxevals
+--   ([value], [errest], nevals, fl)
+--     <- CUB2.example2 (fromIntegral maxevals) (fromIntegral rule)
+--   pokeArray result [realToFrac value, realToFrac errest,
+--                     fromIntegral nevals, (fromIntegral.fromEnum) fl]
+--
+-- foreign export ccall test2p :: Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO ()
+-- test2p :: Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO ()
+-- test2p rule maxevals result = do
+--   rule <- peek rule
+--   maxevals <- peek maxevals
+--   ([value], [errest], nevals, fl)
+--     <- CUB2.example2' (fromIntegral maxevals) (fromIntegral rule)
+--   pokeArray result [realToFrac value, realToFrac errest,
+--                     fromIntegral nevals, (fromIntegral.fromEnum) fl]
+--
+-- foreign export ccall test3 :: Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO ()
+-- test3 :: Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO ()
+-- test3 rule maxevals result = do
+--   rule <- peek rule
+--   maxevals <- peek maxevals
+--   let ([value], [errest], nevals, fl) = runST $ CUB3.example2 (fromIntegral maxevals) (fromIntegral rule)
+--   pokeArray result [realToFrac value, realToFrac errest,
+--                     fromIntegral nevals, (fromIntegral.fromEnum) fl]
 --
 foreign export ccall test4 :: Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO ()
 test4 :: Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO ()

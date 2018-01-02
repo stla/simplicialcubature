@@ -1,7 +1,7 @@
 module Simplex
   where
 import           Common
-import           Data.Array.IO      (thaw)
+import           Data.Array.Unsafe  (unsafeThaw)
 import           Data.Array.Unboxed (UArray, array)
 import           Data.Matrix        (detLU, elementwiseUnsafe, fromLists)
 
@@ -28,16 +28,7 @@ simplicesToArray simplices = do
                       (sequence [[1..dim], [1..(dim+1)], [1..nsimplices]])
       arr = array ((1,1,1),(dim,dim+1,nsimplices)) assocList
             :: UArray (Int,Int,Int) Double
-  thaw arr
-
-simplicesToArray2 :: Simplices -> IO (UArray (Int,Int,Int) Double) -- U3dArray
-simplicesToArray2 simplices = do
-  let dim = length (head (head simplices))
-      nsimplices = length simplices
-      assocList = map (\[i,j,k] -> ((i,j,k), (simplices!!(k-1))!!(j-1)!!(i-1)))
-                      (sequence [[1..dim], [1..(dim+1)], [1..nsimplices]])
-  return $ array ((1,1,1),(dim,dim+1,nsimplices)) assocList
---
+  unsafeThaw arr
 
 canonicalSimplex :: Int -> Simplex
 canonicalSimplex dim =

@@ -23,7 +23,6 @@ import qualified Data.Vector.Unboxed         as UV
 import           Data.Vector.Unboxed.Mutable (STVector, new, unsafeRead,
                                               unsafeWrite)
 import qualified Data.Vector.Unboxed.Mutable as UMV
---import           Math.Combinat.Permutations  (permuteMultiset)
 import           Simplex                     (Simplex, simplexVolume)
 
 type STMatrix s = STUArray s (Int,Int) Double
@@ -84,7 +83,7 @@ smprms n key = do
           writeArray g (1,gms+1) s1
           _ <- mapM (\j -> writeArray g (j,gms+1) r1) [2 .. np]
           unsafeWrite pts gms 3
-          writeArray w (gms+1,iw-1) (1/6) -- rq: déjà écrit
+          writeArray w (gms+1,iw-1) (1/6)
           let r2 = (1-l2)/3
               s2 = 1 - 2*r2
           writeArray g (1,gms+2) s2
@@ -121,9 +120,9 @@ smprms n key = do
       writeArray g (2,gms+3) v1
       _ <- mapM (\j -> writeArray g (j,gms+3) u1) [3 .. np]
       unsafeWrite pts (gms+2) (div (n*np) 2)
-      let u2 = (ndbl+7-2*sqrt15) / (ndbl^2+14*ndbl-11)
+      let u2 = (ndbl+7-2*sqrt15) / (ndbl*ndbl+14*ndbl-11)
           v2 = (1-(ndbl-1)*u2)/2
-          d2 = v2 - u2 -- utilisé? oui plus bas
+          d2 = v2 - u2
       writeArray g (1,gms+4) v2
       writeArray g (2,gms+4) v2
       _ <- mapM (\j -> writeArray g (j,gms+4) u2) [3 .. np]
@@ -186,7 +185,7 @@ smprms n key = do
           p = a*((fromInt p1)/(fromInt p2) - a)
           q = a*(2*a*a - (fromInt p1)/(fromInt p3)) + (fromInt p0)/(fromInt p3)
           th = acos(-q/(2*(sqrt(-p*p*p))))/3
-          r = 2*sqrt(-p) -- 2*sqrt(-p*p*p)**(1/3)
+          r = 2*sqrt(-p)
           tp = 2*pi/3
           a1 = -a + r*(cos(th))
           a2 = -a + r*(cos(th+2*tp))
@@ -299,46 +298,12 @@ matprod mat x = do
               !coef <- innerstep i 1 0
               unsafeWrite out (i-1) coef
               step (i+1)
---      innerstep :: Int -> Int -> Double -> ST s (Double)
       innerstep i j !s | j == n+1 = return s
                        | otherwise = do
                         mat_ij <- readArray mat (i,j)
                         innerstep i (j+1) (s + mat_ij * (x UV.! (j-1)))
   step 1
 
--- matprod2 :: STMatrix s -> V.Vector UVectorD -> ST s ([UVectorD])
--- matprod2 mat x = do
---   (_,(m,n)) <- getBounds mat
---   let l = V.length x
---   out <- replicateM l (UMV.new m :: ST s (UMV.STVector s Double))
---   let step i | i == m+1 = mapM unsafeFreeze out
---              | otherwise = do
---               !coefs <- innerstep i 1 (UV.replicate l 0)
---               mapM (\k -> unsafeWrite (out!!k) (i-1) (coefs UV.! k)) [0..(l-1)]
---               step (i+1)
--- --      innerstep :: Int -> Int -> Double -> ST s (Double)
---       innerstep i j !s | j == n+1 = return s
---                        | otherwise = do
---                         mat_ij <- readArray mat (i,j)
---                         innerstep i (j+1)
---                                   (UV.zipWith (+) s (UV.map (*mat_ij) (UV.map (\k -> (x V.! k) UV.! (j-1)) (UV.fromList [0..(l-1)]))))
--- --                        innerstep i (j+1) (s + mat_ij * (x UV.! (j-1)))
---   step 1
-
--- permuteV :: [Double] -> [UVectorD]
--- permuteV xs = unfold1 next (fromList (sort xs)) where
---   next xs = case findj (UV.reverse xs, UV.empty) of
---     Nothing -> Nothing
---     Just (lls, rs) -> Just $ inc (UV.head lls) (UV.tail lls) (UV.reverse rs, UV.empty)
---   findj (xxs , yys) | xxs == empty = Nothing
---                     | yys == empty = findj (UV.tail xxs , UV.take 1 xxs)
---                     | otherwise = let x = UV.head xxs in if x >= (UV.head yys)
---                        then findj (UV.tail xxs , UV.cons x  yys )
---                        else Just (xxs, yys)
---   inc !u us (xxs , yys) = let x = UV.head xxs in if u >= x
---     then inc u us (UV.tail xxs , UV.cons x yys)
---     else UV.reverse (UV.cons x us) UV.++ UV.reverse (UV.cons u yys) UV.++ (UV.tail xxs)
---
 permuteV2 :: [Double] -> V.Vector UVectorD
 permuteV2 xs = unfold1 next (fromList (sort xs)) where
   next xs = case findj (UV.reverse xs, UV.empty) of
@@ -363,10 +328,7 @@ smpsms :: STMatrix s -> Int -> (UVectorD -> UVectorD) -> ST1dArray s
        -> Double -> ST s (ST1dArray s)
 smpsms vertex nf f g scalar = do
   gAsList <- getElems g
-  -- (_,(nrow,ncol)) <- getBounds vertex -- on dirait que ce truc a ralenti
   f_gPermuts <- V.mapM ((fmap f).(matprod vertex)) (permuteV2 gAsList) -- c'est ça qui est time-consuming
-  -- prods <- matprod2 vertex (permuteV2 gAsList)
-  -- let f_gPermuts = map f prods
   newListArray (1,nf)
                (toList (UV.map (*scalar) (foldl1 (UV.zipWith (+)) f_gPermuts)))
 
@@ -427,7 +389,6 @@ smprul vrts nf f vol g w pts = do
  rule <- sumMatrices toSum -- quid si la liste est vide ?
  basval <- extractColumn rule 1
  rgnerr <- newArray (1,nf) 0 :: ST s (ST1dArray s)
- --let step :: Int -> ST s ()
  let step i | i == nf+1 = return ()
             | otherwise = do
                basval_i <- readArray basval i
@@ -440,7 +401,6 @@ smprul vrts nf f vol g w pts = do
                writeArray rgnerr i (max (errcof*rgnerr_i) (small*nmbs))
                step (i+1)
              where
-              --innerstep :: Int -> Double -> Double -> ST s (Double, Double)
               istep k !x !y | k == 1 = return (x, y)
                             | otherwise = do
                              rule_ik <- readArray rule (i,k)
@@ -458,14 +418,12 @@ rowMeans :: STMatrix s -> ST s UVectorD
 rowMeans m = do
  (_, (nrow,ncol)) <- getBounds m
  outIO <- new nrow :: ST s (STVectorD s)
- --let step :: Int -> ST s ()
  let step i | i == nrow+1 = return ()
             | otherwise = do
                !sum_i <- inner 1 0
                unsafeWrite outIO (i-1) sum_i
                step (i+1)
              where
-               --inner :: Int -> Double -> ST s Double
                inner j !x | j == ncol+1 = return (x / (fromInt ncol))
                           | otherwise = do
                             coef <- readArray m (i,j)
@@ -490,13 +448,11 @@ smpdfs0 nd f top vrts = do
   unsafeWrite iejeitjtisjsls 4 1
   unsafeWrite iejeitjtisjsls 5 2
   dfmxdfnx <- UMV.replicate 2 0 :: ST s (STVectorD s)
-  --let step :: Int -> Double -> ST s ()
   let step i x | i == nd+1 = return ()
                | otherwise = do
                   !emx <- inner (i+1) x
                   step (i+1) emx
                 where
---                  inner :: Int -> Double -> ST s (Double)
                    inner j !y | j == nd+2 = return y
                               | otherwise = do
                                 vi <- (=<<) array1dToVector (extractColumn v i)
@@ -556,7 +512,6 @@ smpdfs0 nd f top vrts = do
           unsafeWrite iejeitjtisjsls 4 ie
           unsafeWrite iejeitjtisjsls 5 je
         False -> do
-          --let -- loop :: Int -> Double -> Int -> ST s (Int)
           let loop l !x !ls | l == nd+2 = return ls
                             | otherwise = do
                               is <- unsafeRead iejeitjtisjsls 4
@@ -745,37 +700,9 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
   -- dans le code R il fait rowSums mais ça me semble inutile
   loop (fl, nv, sbs, aes, vls, ae, vl, vrts, vol)
 
---
--- zip1dArraysWith :: ST1dArray s -> ST1dArray s -> (Double -> Double -> Double) -> ST s (ST1dArray s)
--- zip1dArraysWith a1 a2 f = do
---   (_, n) <- getBounds a1
---   out <- newArray_ (1,n) :: ST s (ST1dArray s)
---   loop 1 out n
---   where
---       --loop :: Int -> STA.STUArray s Int Double -> Int -> ST s (STA.STUArray s Int Double)
---       loop i out n | i == n+1 = return out
---                    | otherwise = do
---                      coef1 <- readArray a1 i
---                      coef2 <- readArray a2 i
---                      writeArray out i (f coef1 coef2)
---                      loop (i+1) out n
---
--- zip1dArraysWith' :: U1dArray -> U1dArray -> (Double -> Double -> Double) -> ST s (ST1dArray s)
--- zip1dArraysWith' a1 a2 f = do
---   let (_, n) = UA.bounds a1
---   out <- newArray_ (1,n) :: ST s (ST1dArray s)
---   loop 1 out n
---   where
---       loop :: Int -> ST1dArray s -> Int -> ST s (ST1dArray s)
---       loop i out n | i == n+1 = return out
---                    | otherwise = do
---                      writeArray out i (f (a1 UA.! i) (a2 UA.! i))
---                      loop (i+1) out n
-
 toSimplex :: ST3dArray s -> Int -> Int -> ST s Simplex
 toSimplex m n k = do
   (_, (nrow,_,_)) <- getBounds m
-  --let getColumn :: Int -> ST s (ST1dArray s)
   let getColumn col = mapIndices (1,nrow) (\i -> (i,col,k)) m
   columns <- mapM getColumn [1..n]
   mapM getElems columns
