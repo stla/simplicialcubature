@@ -4,13 +4,11 @@ module Internal4
   where
 import           Control.Monad               ((<$!>), (=<<), (<=<))
 import           Control.Monad.ST            (ST)
-import           Data.Array.IArray           (Array)
 import           Data.Array.ST               (STUArray, getBounds, getElems,
                                               mapIndices, newArray, newArray_,
                                               newListArray, readArray,
                                               writeArray)
 import           Data.Array.Unboxed          (UArray)
-import qualified Data.Array.Unboxed          as UA
 import qualified Data.Foldable               as DF
 import           Data.List                   (sort)
 import           Data.Maybe                  (fromJust)
@@ -31,7 +29,6 @@ type ST3dArray s = STUArray s (Int,Int,Int) Double
 type STVectorD s = STVector s Double
 type STVectorI s = STVector s Int
 type UVectorD = Vector Double
-type UVectorI = Vector Int
 
 toDbl :: Int -> Double
 toDbl = fromIntegral
@@ -42,7 +39,7 @@ pow x n = foldr (*) 1 (replicate n x)
 square :: Double -> Double
 square x = x*x
 
-smprms :: Int -> Int -> ST s (STMatrix s, Seq UVectorD, UVectorI)
+smprms :: Int -> Int -> ST s (STMatrix s, Seq UVectorD, [Int])
 smprms n key = do
   let (rls, gms, wts) | key == 1 = (3, 2, 3) :: (Int, Int, Int)
                       | key == 2 = (5, 4, 6) :: (Int, Int, Int)
@@ -291,7 +288,7 @@ smprms n key = do
           ratio = nb / (UV.foldr (+) 0 (UV.zipWith (*) ptsU (UV.map square wk)))
           wknew = UV.map (*(sqrt ratio)) wk
       wcolsnew = foldl updateW wcols3 [3..rls]
-  return (g, transpose wcolsnew, pts_out)
+  return (g, transpose wcolsnew, toList $ UV.findIndices (/= 0) pts_out)
 
 transpose :: Seq UVectorD -> Seq UVectorD
 transpose cols =
@@ -383,19 +380,18 @@ sumMatrices matrices = do
  step 1
 
 smprul :: STMatrix s -> Int -> (UVectorD -> UVectorD) -> Double -> STMatrix s
-       -> Seq UVectorD -> UVectorI -> ST s (ST1dArray s, ST1dArray s)
-smprul vrts nf f vol g w pts = do
+       -> Seq UVectorD -> [Int] -> ST s (ST1dArray s, ST1dArray s)
+smprul vrts nf f vol g w pospts = do
  let rtmn = 0.1
      small = 1e-12
      errcof = 8
      rls = UV.length (index w 0)
-     ptsPositive = toList $ UV.findIndices (> 0) pts -- mets ça en sortie de la 1ère fun
  toSum <- mapM (\k -> do
                         g_colk <- extractColumn g (k+1)
                         sms <- smpsms vrts nf f g_colk vol
                         outerProduct2 sms (index w k))
-               ptsPositive
- rule <- sumMatrices toSum -- quid si la liste est vide ?
+               pospts
+ rule <- sumMatrices toSum
  basval <- extractColumn rule 1
  rgnerr <- newArray (1,nf) 0 :: ST s (ST1dArray s)
  let step i | i == nf+1 = return ()
@@ -658,14 +654,14 @@ smpsad :: Int -> Int -> (UVectorD -> UVectorD) -> Int -> Double -> Double -> Int
        -> ST s (UVectorD, UVectorD, Int, Bool)
 smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
   let dfcost = 1 + 2*nd*(nd+1)
-  (g, w, pts) <- smprms nd key
+  (g, w, pospts) <- smprms nd key
   simplices <- mapM (toSimplex vrts (nd+1)) [1..sbs]
   let vol = S.fromList $ map simplexVolume simplices
       nv = sbs*rcls
   matrices <- mapM
               (\k -> mapIndices ((1,1),(nd,nd+1)) (\(i,j) -> (i,j,k)) vrts)
               (S.fromList [1..sbs])
-  br <- mapM (\(m,v) -> smprul m nf f v g w pts) (S.zip matrices vol)
+  br <- mapM (\(m,v) -> smprul m nf f v g w pospts) (S.zip matrices vol)
   aes <- mapM (array1dToVector.snd) br
   vls <- mapM (array1dToVector.fst) br
   let vl = foldl1 (UV.zipWith (+)) vls
@@ -687,7 +683,7 @@ smpsad nd nf f mxfs ea er key rcls sbs vrts info = do
                                   (\k -> mapIndices ((1,1),(nd,nd+1))
                                          (\(i,j) -> (i,j,k)) vrts2)
                                   (S.fromList ((id+1):[(sbs+1)..sbs2]))
-                      br <- mapM (\m -> smprul m nf f vi g w pts) matrices
+                      br <- mapM (\m -> smprul m nf f vi g w pospts) matrices
                       rgnerrs' <- mapM (array1dToVector.snd) br
                       basvals' <- mapM (array1dToVector.fst) br
                       let vl2 = UV.zipWith (+)

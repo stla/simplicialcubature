@@ -8,6 +8,10 @@ import Cubature (Result(..))
 import qualified Cubature4 as CUB4
 import           Foreign
 import           Foreign.C
+import Internal (smprms)
+import qualified Data.Foldable               as DF
+import qualified Data.Vector.Unboxed         as UV
+
 -- import Internal (seqToVector, seqToVector2)
 -- import Data.Vector.Unboxed as UV
 -- import Data.Sequence as S
@@ -25,6 +29,12 @@ import           Foreign.C
 --   n <- peek n
 --   let v = seqToVector2 (S.fromList [1..(fromIntegral n)])
 --   poke result $ fromIntegral (UV.length v)
+
+foreign export ccall testw :: Ptr Double -> IO ()
+testw :: Ptr Double -> IO ()
+testw result = do
+  (_,w,_) <- smprms 4 3
+  pokeArray result $ concat $ map UV.toList (DF.toList w)
 
 foreign export ccall test :: Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO ()
 test :: Ptr CInt -> Ptr CInt -> Ptr CDouble -> IO ()

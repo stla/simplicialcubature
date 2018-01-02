@@ -30,7 +30,6 @@ type UMatrix = UArray (Int,Int) Double
 type IOVectorD = IOVector Double
 type IOVectorI = IOVector Int
 type UVectorD = Vector Double
-type UVectorI = Vector Int
 
 toDbl :: Int -> Double
 toDbl = fromIntegral
@@ -56,6 +55,7 @@ smprms n key = do
       n4 = n2 * (n+3) * (n+4)
       n6 = n4 * (n+5) * (n+6)
       n8 = n6 * (n+7) * (n+8)
+      o = div (n*np) 2
       ndbl = toDbl n
       sqrt15 = 3.872983346207416885179265399782399611
       r1 = (ndbl + 4 - sqrt15) / (ndbl*ndbl + 8*ndbl + 1)
@@ -108,71 +108,75 @@ smprms n key = do
       writeArray g (1,4) (3/(ndbl+5))
       writeArray g (2,4) (3/(ndbl+5))
       _ <- mapM (\j -> writeArray g (j,4) (1/(ndbl+5))) [3 .. np]
-      unsafeWrite pts 3 (div (n*np) 2)
-      let n4double = toDbl n4
-      writeArray w (2,iw-2) (-(pow (ndbl+3) 5) / (16*n4double))
-      writeArray w (3,iw-2) (pow (ndbl+5) 5 / (16*n4double*(ndbl+5)))
-      writeArray w (4,iw-2) (pow (ndbl+5) 5 / (16*n4double*(ndbl+5)))
+      unsafeWrite pts 3 o
+      let tmp = toDbl (16*n4)
+      writeArray w (2,iw-2) (-(pow (ndbl+3) 5) / tmp)
+      writeArray w (3,iw-2) (pow (ndbl+5) 4 / tmp)
+      writeArray w (4,iw-2) (pow (ndbl+5) 4 / tmp)
     False -> return ()
   case key > 2 of
     True -> do
-      let u1 = (ndbl+7+2*sqrt15) / (ndbl*ndbl+14*ndbl-11)
-          v1 = (1-(ndbl-1)*u1)/2
+      let tmp' = ndbl*ndbl + 14*ndbl - 11
+          u1 = (ndbl+7+2*sqrt15) / tmp'
+          v1 = 0.5*(1-(ndbl-1)*u1)
           d1 = v1 - u1
       writeArray g (1,gms+3) v1
       writeArray g (2,gms+3) v1
       _ <- mapM (\j -> writeArray g (j,gms+3) u1) [3 .. np]
-      unsafeWrite pts (gms+2) (div (n*np) 2)
-      let u2 = (ndbl+7-2*sqrt15) / (ndbl*ndbl+14*ndbl-11)
+      unsafeWrite pts (gms+2) o
+      let u2 = (ndbl + 7 - 2*sqrt15) / tmp'
           v2 = (1-(ndbl-1)*u2)/2
           d2 = v2 - u2
       writeArray g (1,gms+4) v2
       writeArray g (2,gms+4) v2
       _ <- mapM (\j -> writeArray g (j,gms+4) u2) [3 .. np]
-      unsafeWrite pts (gms+3) (div (n*np) 2)
+      unsafeWrite pts (gms+3) o
       case n == 2 of
         True -> do
           writeArray w (gms+3,iw-3) ((155-sqrt15)/1200)
           writeArray w (gms+4,iw-3) ((155+sqrt15)/1200)
-          writeArray w (1,iw-3) (1 - 31/40)
+          writeArray w (1,iw-3) (9/40)
         False -> do
           case n == 3 of
             True -> do
               writeArray w (gms+1,iw-3) ((2665+14*sqrt15)/37800)
               writeArray w (gms+2,iw-3) ((2665-14*sqrt15)/37800)
-              writeArray w (gms+3,iw-3) (30/567)
+              writeArray w (gms+3,iw-3) (10/189)
               unsafeWrite pts (gms+3) 0
             False -> do
               let r2 = (ndbl+4+sqrt15) / (ndbl*ndbl+8*ndbl+1)
                   l2 = 1 - (ndbl+1)*r2
+                  n4dbl = toDbl n4
               writeArray w (gms+1,iw-3)
                            ((2*(27-ndbl)/(ndbl+5)-l2*(13-ndbl)) /
-                           ((pow l1 4)*(l1-l2)*(toDbl n4)))
+                           ((pow l1 4)*(l1-l2)*n4dbl))
               writeArray w (gms+2,iw-3)
                            ((2*(27-ndbl)/(ndbl+5)-l1*(13-ndbl)) /
-                           ((pow l2 4)*(l2-l1)*(toDbl n4)))
+                           ((pow l2 4)*(l2-l1)*n4dbl))
               writeArray w (gms+3,iw-3)
-                           ((2/(ndbl+5)-d2)/((toDbl n4)*(d1-d2)*(pow d1 4)))
+                           ((2/(ndbl+5)-d2)/(n4dbl*(d1-d2)*(pow d1 4)))
               writeArray w (gms+4,iw-3)
-                           ((2/(ndbl+5)-d1)/((toDbl n4)*(d2-d1)*(pow d2 4)))
+                           ((2/(ndbl+5)-d1)/(n4dbl*(d2-d1)*(pow d2 4)))
       writeArray g (1,5) (7/(ndbl+7))
       _ <- mapM (\i -> writeArray g (i,5) (1/(ndbl+7))) [2 .. np]
       unsafeWrite pts 4 np
-      writeArray g (1,6) (5/(ndbl+7))
-      writeArray g (2,6) (3/(ndbl+7))
-      _ <- mapM (\i -> writeArray g (i,6) (1/(ndbl+7))) [3 .. np]
+      let invnp7 = 1/(ndbl+7)
+      writeArray g (1,6) (5*invnp7)
+      writeArray g (2,6) (3*invnp7)
+      _ <- mapM (\i -> writeArray g (i,6) invnp7) [3 .. np]
       unsafeWrite pts 5 (np*n)
-      _ <- mapM (\i -> writeArray g (i,7) (3/(ndbl+7))) [1,2,3]
+      _ <- mapM (\i -> writeArray g (i,7) (3*invnp7)) [1,2,3]
       _ <- case np > 3 of
-        True  -> mapM (\i -> writeArray g (i,7) (1/(ndbl+7))) [4..np]
+        True  -> mapM (\i -> writeArray g (i,7) invnp7) [4..np]
         False -> return [()]
       unsafeWrite pts 6 (div ((n-1)*n*np) 6)
       writeArray w (2,iw-4) ((pow (ndbl+3) 7)/(toDbl $ 128*n4*(n+5)))
+      let tmp'' = toDbl (64*n6)
       _ <- mapM
-           (\i -> writeArray w (i,iw-4) (-(pow (ndbl+5) 7) /(toDbl $ 64*n6)))
+           (\i -> writeArray w (i,iw-4) (-(pow (ndbl+5) 7) / tmp''))
            [3,4]
       _ <- mapM
-           (\i -> writeArray w (i,iw-4) (pow (ndbl+7) 7/(toDbl $ 64*n6*(n+7))))
+           (\i -> writeArray w (i,iw-4) (pow (ndbl+7) 6 / tmp''))
            [5,6,7]
       return ()
     False -> return ()
@@ -182,19 +186,19 @@ smprms n key = do
           u5 = -216 * sg * (toDbl $ 52212 - n*(6353 + n*(1934-n*27)))
           u6 =  1296 * sg * (toDbl $ 7884 - n*(1541 - n*9))
           u7 = -7776 * sg * (toDbl $ 8292 - n*(1139 - n*3))/(ndbl + 7)
-          p0 = -144 * (142528 + n*(23073 - n*115))
-          p1 = -12 * (6690556 + n*(2641189 + n*(245378 - n*1495)))
-          p2 = -16 * (6503401 + n*(4020794+n*(787281+n*(47323-n*385))))
-          p3 = -(6386660 + n*(4411997+n*(951821+n*(61659-n*665))))*(n + 7)
-          a = (toDbl p2)/(toDbl $ 3*p3)
-          p = a*((toDbl p1)/(toDbl p2) - a)
-          q = a*(2*a*a - (toDbl p1)/(toDbl p3)) + (toDbl p0)/(toDbl p3)
+          p0 = toDbl $ -144 * (142528 + n*(23073 - n*115))
+          p1 = toDbl $ -12 * (6690556 + n*(2641189 + n*(245378 - n*1495)))
+          p2 = toDbl $ -16 * (6503401 + n*(4020794+n*(787281+n*(47323-n*385))))
+          p3 = toDbl $ -(6386660 + n*(4411997+n*(951821+n*(61659-n*665))))*(n+7)
+          a = p2/(3*p3)
+          p = a*(p1/p2 - a)
+          q = a*(2*a*a - p1/p3) + p0/p3
           th = acos(-q/(2*(sqrt(-p*p*p))))/3
           r = 2*sqrt(-p)
           tp = 2*pi/3
           a1 = -a + r*(cos(th))
-          a2 = -a + r*(cos(th+2*tp))
           a3 = -a + r*(cos(th+tp))
+          a2 = -3*a - a1 - a3 -- a3 = -a + r*(cos(th+tp))
           npdbl = toDbl np
       writeArray g (1,gms+5) ((1-ndbl*a1)/npdbl)
       _ <- mapM (\i -> writeArray g (i,gms+5) ((1+a1)/npdbl)) [2..np]
@@ -211,50 +215,51 @@ smprms n key = do
                  ((u7-(a1+a3)*u6+a1*a3*u5)/(a2*a2-(a1+a3)*a2+a1*a3)/(pow a2 5))
       writeArray w (gms+7,iw-5)
                  ((u7-(a2+a1)*u6+a2*a1*u5)/(a3*a3-(a2+a1)*a3+a2*a1)/(pow a3 5))
-      writeArray g (1,gms+8) (4/(ndbl+7))
-      writeArray g (2,gms+8) (4/(ndbl+7))
-      _ <- mapM (\i -> writeArray g (i,gms+8) (1/(ndbl+7))) [3..np]
-      unsafeWrite pts (gms+7) (div (np*n) 2)
+      let invnp7' = 1/(ndbl+7)
+      writeArray g (1,gms+8) (4*invnp7')
+      writeArray g (2,gms+8) (4*invnp7')
+      _ <- mapM (\i -> writeArray g (i,gms+8) invnp7') [3..np]
+      unsafeWrite pts (gms+7) o
       writeArray w (gms+8,iw-5) (10*(pow (ndbl+7) 6)/(toDbl $ 729*n6))
-      writeArray g (1,gms+9) (11/(ndbl+7)/2)
-      writeArray g (2,gms+9) (5/(ndbl+7)/2)
-      _ <- mapM (\i -> writeArray g (i,gms+9) (1/(ndbl+7))) [3..np]
+      writeArray g (1,gms+9) (5.5*invnp7')
+      writeArray g (2,gms+9) (2.5*invnp7')
+      _ <- mapM (\i -> writeArray g (i,gms+9) invnp7') [3..np]
       unsafeWrite pts (gms+8) (np*n)
       writeArray w (gms+9,iw-5) (64*(pow (ndbl+7) 6) / (toDbl $ 6561*n6))
-      writeArray w (4,iw-5) (-(pow (ndbl+5) 7) / (toDbl $ 64*n6))
-      writeArray w (7,iw-5) (pow (ndbl+7) 7 / (toDbl $ 64*n6*(n+7)))
-      writeArray g (1,8) (9/(ndbl+9))
-      _ <- mapM (\i -> writeArray g (i,8) (1/(ndbl+9))) [2..np]
+      let tmp''' = toDbl (64*n6)
+      writeArray w (4,iw-5) (-(pow (ndbl+5) 7) / tmp''')
+      writeArray w (7,iw-5) (pow (ndbl+7) 6 / tmp''')
+      let invnp9 = 1/(ndbl+9)
+      writeArray g (1,8) (9*invnp9)
+      _ <- mapM (\i -> writeArray g (i,8) invnp9) [2..np]
       unsafeWrite pts 7 np
-      writeArray g (1,9) (7/(ndbl+9))
-      writeArray g (2,9) (3/(ndbl+9))
-      _ <- mapM (\i -> writeArray g (i,9) (1/(ndbl+9))) [3..np]
+      writeArray g (1,9) (7*invnp9)
+      writeArray g (2,9) (3*invnp9)
+      _ <- mapM (\i -> writeArray g (i,9) invnp9) [3..np]
       unsafeWrite pts 8 (np*n)
-      _ <- mapM (\i -> writeArray g (i,10) (5/(ndbl+9))) [1,2]
-      _ <- mapM (\i -> writeArray g (i,10) (1/(ndbl+9))) [3..np]
-      unsafeWrite pts 9 (div (np*n) 2)
-      writeArray g (1,11) (5/(ndbl+9))
-      _ <- mapM (\i -> writeArray g (i,11) (3/(ndbl+9))) [2,3]
+      _ <- mapM (\i -> writeArray g (i,10) (5*invnp9)) [1,2]
+      _ <- mapM (\i -> writeArray g (i,10) invnp9) [3..np]
+      unsafeWrite pts 9 o
+      writeArray g (1,11) (5*invnp9)
+      _ <- mapM (\i -> writeArray g (i,11) (3*invnp9)) [2,3]
       _ <- case np > 3 of
-        True  -> mapM (\i -> writeArray g (i,11) (1/(ndbl+9))) [4..np]
+        True  -> mapM (\i -> writeArray g (i,11) invnp9) [4..np]
         False -> return [()]
-      unsafeWrite pts 10 (div (np*n*(n-1)) 2)
-      writeArray w (2,iw-6) (-(pow (ndbl+3) 9)/(toDbl $ 6*256*n6))
+      unsafeWrite pts 10 (o*(n-1))
+      writeArray w (2,iw-6) (-(pow (ndbl+3) 9)/(toDbl $ 1536*n6))
       _ <- mapM (\i -> writeArray w (i,iw-6)
                                   (pow (ndbl+5) 9 /(toDbl $ 512*n6*(n+7))))
                 [3,4]
-      _ <- mapM (\i -> writeArray w (i,iw-6)
-                                  (-(pow (ndbl+7) 9)/(toDbl $ 256*n8)))
+      let tmp'''' = toDbl $ 256*n8
+      _ <- mapM (\i -> writeArray w (i,iw-6) (-(pow (ndbl+7) 9) / tmp''''))
                 [5,6,7]
-      _ <- mapM (\i -> writeArray w (i,iw-6)
-                                  (pow (ndbl+9) 9/(toDbl $ 256*n8*(n+9))))
-                [8..11]
+      _ <- mapM (\i -> writeArray w (i,iw-6) (pow (ndbl+9) 8 / tmp'''')) [8..11]
       case n > 2 of
         True ->  do
-          _ <- mapM (\i -> writeArray g (i,12) (3/(ndbl+9))) [1..4]
-          _ <- mapM (\i -> writeArray g (i,12) (1/(ndbl+9))) [5..np]
+          _ <- mapM (\i -> writeArray g (i,12) (3*invnp9)) [1..4]
+          _ <- mapM (\i -> writeArray g (i,12) invnp9) [5..np]
           unsafeWrite pts 11 (div (np*n*(n-1)*(n-2)) 24)
-          writeArray w (12,iw-6) (pow (ndbl+9) 9 / (toDbl $ 256*n8*(n+9)))
+          writeArray w (12,iw-6) (pow (ndbl+9) 8 / (toDbl $ 256*n8))
         False -> return ()
     False -> return ()
   rowsIO <- mapM (extractRow w) (S.fromList [2..wts])
@@ -432,19 +437,21 @@ array1dToUVectorD array = (<$!>) fromList (getElems array)
 
 getVectors :: Int -> IO3dArray -> Int -> Int -> Int -> IO (UVectorD, UVectorD) -- pas de gain
 getVectors n m k j1 j2 = do
-  out1 <- new n :: IO IOVectorD
-  out2 <- new n :: IO IOVectorD
-  let loop :: Int -> IO ()
-      loop i | i == n+1 = return ()
-             | otherwise = do
-               coef1 <- readArray m (i,j1,k)
-               unsafeWrite out1 (i-1) coef1
-               coef2 <- readArray m (i,j2,k)
-               unsafeWrite out2 (i-1) coef2
-               loop (i+1)
-  loop 1
-  out1U <- UV.unsafeFreeze out1
-  out2U <- UV.unsafeFreeze out2
+  out1U <- (=<<) array1dToUVectorD (mapIndices (1,n) (\i -> (i,j1,k)) m)
+  out2U <- (=<<) array1dToUVectorD (mapIndices (1,n) (\i -> (i,j2,k)) m)
+  -- out1 <- new n :: IO IOVectorD
+  -- out2 <- new n :: IO IOVectorD
+  -- let loop :: Int -> IO ()
+  --     loop i | i == n+1 = return ()
+  --            | otherwise = do
+  --              coef1 <- readArray m (i,j1,k)
+  --              unsafeWrite out1 (i-1) coef1
+  --              coef2 <- readArray m (i,j2,k)
+  --              unsafeWrite out2 (i-1) coef2
+  --              loop (i+1)
+  -- loop 1
+  -- out1U <- UV.unsafeFreeze out1
+  -- out2U <- UV.unsafeFreeze out2
   return (out1U,out2U)
 
 
@@ -563,31 +570,31 @@ smpdfs nd f top sbs vrts = do
               unsafeWrite iejeitjtisjsls 4 js'
               unsafeWrite iejeitjtisjsls 5 it
             False -> return ()
-  vrts2 <- newArray_ ((1,1,1),(nd,nd+1,sbs+nregions-1)) :: IO IO3dArray
-  let go1 :: Int -> IO ()
-      go1 i | i == nd+1 = return ()
-            | otherwise = do
-              let go2 j | j == nd+2 = go1 (i+1)
-                        | otherwise = do
-                          let go3 k | k == sbs+nregions = go2 (j+1)
-                                    | otherwise = do
-                                      case k <= sbs of
-                                        True -> do
-                                          coef <- readArray vrts (i,j,k)
-                                          writeArray vrts2 (i,j,k) coef
-                                        False -> do
-                                          coef <- readArray v (i,j)
-                                          writeArray vrts2 (i,j,k) coef
-                                      go3 (k+1)
-                          go3 1
-              go2 1
-  go1 1
+  vrts2 <- mapIndices ((1,1,1),(nd,nd+1,sbs+nregions-1))
+                      (\(i,j,k) -> (i, j, if k <= sbs then k else top)) vrts
+  -- vrts2 <- newArray_ ((1,1,1),(nd,nd+1,sbs+nregions-1)) :: IO IO3dArray
+  -- let go1 :: Int -> IO ()
+  --     go1 i | i == nd+1 = return ()
+  --           | otherwise = do
+  --             let go2 j | j == nd+2 = go1 (i+1)
+  --                       | otherwise = do
+  --                         let go3 k | k == sbs+nregions = go2 (j+1)
+  --                                   | otherwise = do
+  --                                     case k <= sbs of
+  --                                       True -> do
+  --                                         coef <- readArray vrts (i,j,k)
+  --                                         writeArray vrts2 (i,j,k) coef
+  --                                       False -> do
+  --                                         coef <- readArray v (i,j)
+  --                                         writeArray vrts2 (i,j,k) coef
+  --                                     go3 (k+1)
+  --                         go3 1
+  --             go2 1
+  -- go1 1
   is <- unsafeRead iejeitjtisjsls 4
   js <- unsafeRead iejeitjtisjsls 5
-  vtiIO <- extractColumn v is
-  vtjIO <- extractColumn v js
-  vti <- array1dToUVectorD vtiIO
-  vtj <- array1dToUVectorD vtjIO
+  vti <- (=<<) array1dToUVectorD (extractColumn v is)
+  vtj <- (=<<) array1dToUVectorD (extractColumn v js)
   case nregions == 4 of
     True -> do
       let vt = UV.zipWith (((*0.5).).(+)) vti vtj
@@ -634,27 +641,24 @@ smpdfs nd f top sbs vrts = do
           replaceDimensions vrts2 (js,sbs+1) (is,sbs+2) vv
           replaceDimension vrts2 (js,sbs+2) vtj
   return (nregions, vrts2)
-
-replaceDimension :: IO3dArray -> (Int,Int) -> UVectorD -> IO ()
-replaceDimension m (j,k) v = do
-  (_, (n,_,_)) <- getBounds m
-  let loop :: Int -> IO ()
-      loop i | i == n+1 = return ()
-             | otherwise = do
-               writeArray m (i,j,k) ((UV.!) v (i-1))
-               loop (i+1)
-  loop 1
-
-replaceDimensions :: IO3dArray -> (Int,Int) -> (Int,Int) -> UVectorD -> IO ()
-replaceDimensions m (j1,k1) (j2,k2) v = do
-  (_, (n,_,_)) <- getBounds m
-  let loop :: Int -> IO ()
-      loop i | i == n+1 = return ()
-             | otherwise = do
-               writeArray m (i,j1,k1) ((UV.!) v (i-1))
-               writeArray m (i,j2,k2) ((UV.!) v (i-1))
-               loop (i+1)
-  loop 1
+  where
+    replaceDimension :: IO3dArray -> (Int,Int) -> UVectorD -> IO ()
+    replaceDimension m (j,k) v = do
+      let loop :: Int -> IO ()
+          loop i | i == nd+1 = return ()
+                 | otherwise = do
+                   writeArray m (i,j,k) ((UV.!) v (i-1))
+                   loop (i+1)
+      loop 1
+    replaceDimensions :: IO3dArray -> (Int,Int) -> (Int,Int) -> UVectorD -> IO ()
+    replaceDimensions m (j1,k1) (j2,k2) v = do
+      let loop :: Int -> IO ()
+          loop i | i == nd+1 = return ()
+                 | otherwise = do
+                   writeArray m (i,j1,k1) ((UV.!) v (i-1))
+                   writeArray m (i,j2,k2) ((UV.!) v (i-1))
+                   loop (i+1)
+      loop 1
 
 -- | Number of evaluations for each subregion
 smpchc :: Int -> Int -> Int

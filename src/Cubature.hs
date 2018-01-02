@@ -67,8 +67,8 @@ example rule = integrateOnSimplex fExample [canonicalSimplex 3] 2 10000 0 1e-5 r
 example' rule = integrateOnSimplex fExample' [canonicalSimplex 3] 2 10000 0 1e-5 rule
 
 fExample2 :: UVectorD -> Double
--- fExample2 v = UV.singleton $ sqrt((x!!3-x!!2)/(x!!1-x!!0))*exp(-(x!!1-x!!0))
-fExample2 v = exp(0.5*(log (x!!3-x!!2) - log (x!!1-x!!0)) - (x!!1-x!!0))
+fExample2 v = sqrt((x!!3-x!!2)/(x!!1-x!!0))*exp(-(x!!1-x!!0))
+--fExample2 v = exp(0.5*(log (x!!3-x!!2) - log (x!!1-x!!0)) - (x!!1-x!!0))
   where y = UV.toList v
         x = map (\i -> sum $ take i y) [1..4]
 
