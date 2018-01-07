@@ -30,7 +30,9 @@ library
                      , Cubature
                      , Cubature4
                      , Internal4
-  other-extensions:    BangPatterns, DuplicateRecordFields
+  other-extensions:    BangPatterns
+                     , DuplicateRecordFields
+                     , DuplicateRecordFields
   build-depends:       base >= 4.7 && < 5
                      , combinat
                      , array

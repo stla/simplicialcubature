@@ -32,17 +32,17 @@ simplicesToArray simplices = do
 
 canonicalSimplex :: Int -> Simplex
 canonicalSimplex dim =
-  (replicate dim 0) :
-    (map (\v -> map (fromIntegral.fromEnum.(== v)) [1..dim]) [1..dim])
+  replicate dim 0 :
+    map (\v -> map (fromIntegral.fromEnum.(== v)) [1..dim]) [1..dim]
 
 simplexVolume :: Simplex -> Double -- rq: tu calcules le fact à chaque fois
-simplexVolume s = (abs (detLU v)) / (fromIntegral (product [1..n]))
+simplexVolume s = abs (detLU v) / fromIntegral (product [1..n])
   where n = length s - 1
         m1 = fromLists (tail s)
         m2 = fromLists $ replicate n (head s)
         v = elementwiseUnsafe (-) m1 m2
 
-jacobian :: Simplex -> Double
+jacobian :: Simplex -> Double -- not used
 jacobian s = abs (detLU (elementwiseUnsafe (-) m1 m2))
   where m1 = fromLists (tail s)
         m2 = fromLists $ replicate (length s - 1) (head s)
