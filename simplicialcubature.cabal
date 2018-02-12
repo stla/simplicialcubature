@@ -29,6 +29,8 @@ library
                      , SimplexCubature
                      , SimplexCubature.Examples
                      , SphericalSimplexCubature.Internal
+                     , SphericalSimplexCubature
+                     , SphericalSimplexCubature.Examples
   other-extensions:    BangPatterns
                      , DuplicateRecordFields
   build-depends:       base >= 4.7 && < 5

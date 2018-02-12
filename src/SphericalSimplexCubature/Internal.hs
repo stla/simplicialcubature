@@ -1,20 +1,16 @@
 module SphericalSimplexCubature.Internal
+  (orthants, SphericalSimplex, transformedIntegrand)
   where
-import           Data.List.Index (imap)
-import           Data.Matrix     (detLU, diagonalList, fromLists, minorMatrix,
-                                  zero, (<->), toLists)
+import           Data.List.Index     (imap)
+import           Data.Matrix         (detLU, diagonalList, fromLists,
+                                      minorMatrix, toLists, zero, (<->))
+import           Data.Vector.Unboxed (Vector)
+import qualified Data.Vector.Unboxed as V
 
 type SphericalSimplex = [[Double]] -- square [v1,v2,v3,v4]
 
-ss :: SphericalSimplex
-ss = [ [1,0,0,0]
-     , [0,1,0,0]
-     , [0,0,1,0]
-     , [0,0,0,1]
-     ]
-
 orthants :: Int -> [SphericalSimplex]
-orthants n = map (toLists . diagonalList n 0) (pm n)
+orthants n = reverse $ map (toLists . diagonalList n 0) (pm n)
   where pm 2 = [[i,j] | i <- [-1,1], j <- [-1,1]]
         pm k = [i : l | i <- [-1,1], l <- pm (k-1)]
 
@@ -59,6 +55,8 @@ extProduct vectors =
 sigma :: SphericalSimplex -> [Double] -> Double
 sigma ssimplex stu = norm2 $ extProduct (dg ssimplex stu)
 
-transformedIntegrand :: SphericalSimplex -> ([Double] -> Double) -> ([Double] -> Double)
+transformedIntegrand :: SphericalSimplex -> ([Double] -> Double)
+                     -> (Vector Double -> Double)
 transformedIntegrand ssimplex integrand stu =
-  sigma ssimplex stu * integrand (g ssimplex stu)
+  let stul = V.toList stu in
+  sigma ssimplex stul * integrand (g ssimplex stul)
