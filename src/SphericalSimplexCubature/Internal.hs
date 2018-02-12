@@ -28,9 +28,9 @@ scalarTimesList :: Double -> [Double] -> [Double]
 scalarTimesList lambda = map (* lambda)
 
 f :: SphericalSimplex -> [Double] -> [Double]
-f vertices stu = foldr (zipWith (+)) (ss!!0) terms
+f vertices stu = foldr (zipWith (+)) (vertices!!0) terms
   where
-    w = map (zipWith subtract (ss!!0)) (tail vertices)
+    w = map (zipWith subtract (vertices!!0)) (tail vertices)
     terms = zipWith scalarTimesList stu w
 
 g :: SphericalSimplex -> [Double] -> [Double]

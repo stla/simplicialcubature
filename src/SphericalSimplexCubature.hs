@@ -19,3 +19,24 @@ integrand'' = integrand' . toList
 
 test :: IO Result
 test = integrateOnSimplex' integrand'' [canonicalSimplex 3] 100000 0 1e-5 3
+
+-- sphere surface
+integrand2 :: [Double] -> Double
+integrand2 _ = 1
+
+ssimplices :: [SphericalSimplex]
+ssimplices = orthants 3
+
+integrands :: [[Double] -> Double]
+integrands = map (`transformedIntegrand` integrand2) ssimplices
+
+integrands' :: [Vector Double -> Double]
+integrands' = map (. toList) integrands
+
+integrals :: IO [Result]
+integrals = mapM (\f -> integrateOnSimplex' f [canonicalSimplex 2] 10000 0 1e-5 3) integrands'
+
+total :: IO Double
+total = do
+  results <- integrals
+  return $ sum (map value results)
