@@ -1,9 +1,12 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-module Cubature
+module SimplexCubature
+  (Result(..), Results(..), integrateOnSimplex, integrateOnSimplex')
   where
-import qualified Data.Vector.Unboxed as UV
-import           Internal
+import           Data.Array.Unboxed       (UArray, array)
+import           Data.Array.Unsafe        (unsafeThaw)
+import qualified Data.Vector.Unboxed      as UV
 import           Simplex
+import           SimplexCubature.Internal
 
 data Results = Results
   { values         :: [Double]
@@ -18,6 +21,16 @@ data Result = Result
   , evaluations   :: Int
   , success       :: Bool
   } deriving Show
+
+simplicesToArray :: Simplices -> IO IO3dArray
+simplicesToArray simplices = do
+  let dim = length (head (head simplices))
+      nsimplices = length simplices
+      assocList = map (\[i,j,k] -> ((i,j,k), (simplices!!(k-1))!!(j-1)!!(i-1)))
+                      (sequence [[1..dim], [1..(dim+1)], [1..nsimplices]])
+      arr = array ((1,1,1),(dim,dim+1,nsimplices)) assocList
+            :: UArray (Int,Int,Int) Double
+  unsafeThaw arr
 
 integrateOnSimplex
     :: (VectorD -> VectorD)   -- integrand
@@ -55,36 +68,3 @@ integrateOnSimplex' f s maxevals absError relError rule = do
         adsimp n 1 maxevals (UV.singleton . f) absError relError rule v False
       return $ Result (UV.head val) (UV.head err) nevals (not fl)
     else error "invalid simplices"
-
-fExample :: VectorD -> VectorD
-fExample v = let list = UV.toList v in UV.fromList [sum list, sum (map (^2) list)]
-
-fExample' :: VectorD -> VectorD
-fExample' v = let list = UV.toList v in UV.fromList [sum list, sum list]
-
-example rule = integrateOnSimplex fExample [canonicalSimplex 3] 2 10000 0 1e-5 rule
-
-example' rule = integrateOnSimplex fExample' [canonicalSimplex 3] 2 10000 0 1e-5 rule
-
-fExample2 :: VectorD -> Double
-fExample2 v = sqrt((x!!3-x!!2)/(x!!1-x!!0))*exp(-(x!!1-x!!0))
---fExample2 v = exp(0.5*(log (x!!3-x!!2) - log (x!!1-x!!0)) - (x!!1-x!!0))
-  where y = UV.toList v
-        x = map (\i -> sum $ take i y) [1..4]
-
-example2 maxevals rule = integrateOnSimplex' fExample2 [canonicalSimplex 4] maxevals 0 1e-5 rule
-
-fExample2' :: VectorD -> Double
-fExample2' v = sqrt((x!!3-x!!2)/(x!!1-x!!0))*exp(-(x!!1-x!!0))
-  where x = UV.toList v
-
-example2' maxevals rule = integrateOnSimplex' fExample2'
-                          [[[0,0,0,0],[1,1,1,1],[0,1,1,1],[0,0,1,1],[0,0,0,1]]]
-                          maxevals 0 1e-5 rule
-
-fExample3 :: VectorD -> Double
-fExample3 v = exp (UV.sum v)
-
-example3 maxevals rule = integrateOnSimplex' fExample3
-                         [[[0,0,0],[1,1,1],[0,1,1],[0,0,1]]]
-                         maxevals 0 1e-5 rule

@@ -1,7 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
-module Internal
+module SimplexCubature.Internal
   where
-import           Common
 import           Data.Array.IO               (IOUArray, getBounds, getElems,
                                               mapIndices, newArray, newArray_,
                                               newListArray, readArray,
@@ -23,6 +22,7 @@ import           Simplex                     (Simplex, simplexVolume)
 
 type IOMatrix = IOUArray (Int,Int) Double
 type IO1dArray = IOUArray Int Double
+type IO3dArray = IOUArray (Int,Int,Int) Double
 type IOVectorD = IOVector Double
 type IOVectorI = IOVector Int
 type VectorD = Vector Double

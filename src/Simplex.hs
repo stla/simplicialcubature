@@ -1,8 +1,5 @@
 module Simplex
   where
-import           Common
-import           Data.Array.Unsafe  (unsafeThaw)
-import           Data.Array.Unboxed (UArray, array)
 import           Data.Matrix        (detLU, elementwiseUnsafe, fromLists)
 
 type Simplex = [[Double]]
@@ -11,24 +8,14 @@ type Simplices = [Simplex]
 isValidSimplex :: Simplex -> Bool
 isValidSimplex simplex =
   (length simplex == dim+1) &&
-    (all (== dim) (map length (tail simplex)))
+    all (== dim) (map length (tail simplex))
   where dim = length (head simplex)
 
 isValidSimplices :: Simplices -> Bool
 isValidSimplices simplices =
-  (foldr (&&) True (map isValidSimplex simplices)) &&
-    (all (== spaceDim (head simplices))) (map spaceDim (tail simplices))
+  all isValidSimplex simplices &&
+    all (== spaceDim (head simplices)) (map spaceDim (tail simplices))
   where spaceDim simplex = length (head simplex)
-
-simplicesToArray :: Simplices -> IO IO3dArray
-simplicesToArray simplices = do
-  let dim = length (head (head simplices))
-      nsimplices = length simplices
-      assocList = map (\[i,j,k] -> ((i,j,k), (simplices!!(k-1))!!(j-1)!!(i-1)))
-                      (sequence [[1..dim], [1..(dim+1)], [1..nsimplices]])
-      arr = array ((1,1,1),(dim,dim+1,nsimplices)) assocList
-            :: UArray (Int,Int,Int) Double
-  unsafeThaw arr
 
 canonicalSimplex :: Int -> Simplex
 canonicalSimplex dim =
