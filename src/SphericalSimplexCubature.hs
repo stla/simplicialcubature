@@ -1,5 +1,5 @@
 module SphericalSimplexCubature
-  (integrateOnSphericalSimplex, SphericalSimplex, orthants)
+  (integrateOnSphericalSimplex, SphericalSimplex, orthants, Result (..))
   where
 import           Simplex
 import           SimplexCubature

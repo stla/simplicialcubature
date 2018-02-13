@@ -1,6 +1,5 @@
 module SphericalSimplexCubature.Examples
   where
-import           SimplexCubature          (Result (..))
 import           SphericalSimplexCubature
 
 integrand :: [Double] -> Double
